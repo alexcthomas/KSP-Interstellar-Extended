@@ -1,10 +1,7 @@
-﻿// This code is released under the [unlicense](http://unlicense.org/).
-using KSP.UI.Screens;
-using System;
+﻿using KSP.UI.Screens;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using UnityEngine;
 
 namespace FNPlugin
@@ -14,45 +11,54 @@ namespace FNPlugin
     {
         RDNode selectedNode;
 
-        Color greenColor = new Color(0.717f, 0.819f, 0.561f);  // light green RGB(183,209,143)
+        readonly Color greenColor = new Color(0.717f, 0.819f, 0.561f);
 
-        FieldInfo fieldInfoRDPartList;
+        FieldInfo _fieldInfoRdPartList;
 
         public void Update()
         {
             // Do nothing if there is no PartList
-            if (RDController.Instance == null || RDController.Instance.partList == null) return;
+            if (RDController.Instance == null || RDController.Instance.partList == null)
+                return;
 
             // In case the node is deselected
             if (RDController.Instance.node_selected == null)
-                selectedNode = null; 
+                selectedNode = null;
 
             // Do nothing if the tooltip hasn't changed since last update
-            if (selectedNode == RDController.Instance.node_selected) 
+            if (selectedNode == RDController.Instance.node_selected)
                 return;
 
-            // Get the the selected node and partlist ui object
+            // Get the the selected node and partList ui object
             selectedNode = RDController.Instance.node_selected;
 
             // retrieve fieldInfo type
-            if (fieldInfoRDPartList == null)
-                fieldInfoRDPartList = typeof(RDPartList).GetField("partListItems", BindingFlags.NonPublic | BindingFlags.GetField | BindingFlags.Instance);
+            if (_fieldInfoRdPartList == null)
+                _fieldInfoRdPartList = typeof(RDPartList).GetField("partListItems", BindingFlags.NonPublic | BindingFlags.GetField | BindingFlags.Instance);
 
-            var items = (List<RDPartListItem>)fieldInfoRDPartList.GetValue(RDController.Instance.partList);
+            if (_fieldInfoRdPartList == null)
+                return;
 
-            //if (items == null)
-             //   Debug.LogError("[KSPI]: RDColoredUpgradeIcon fieldInfoRDPartList faild to retrieve partlist ");
+            var value = _fieldInfoRdPartList.GetValue(RDController.Instance.partList);
 
-            var upgradedTemplateItems = items.Where(p => !p.isPart && p.upgrade != null).ToList();
+            var rdPartListItems = value as List<RDPartListItem>;
+            if (rdPartListItems == null)
+                return;
 
-            //if (upgradedTemplateItems.Count == 0)
-            //    Debug.LogError("[KSPI]: RDColoredUpgradeIcon upgradedTemplateItems is empty ");
+            var upgradedTemplateItems = rdPartListItems.Where(p => !p.isPart && p.upgrade != null).ToList();
 
-            foreach (RDPartListItem item in upgradedTemplateItems)
+            if (upgradedTemplateItems.Count == 0)
+                return;
+
+            foreach (var item in upgradedTemplateItems)
             {
-                //Debug.Log("[KSPI]: RDColoredUpgradeIcon upgrade name " + item.upgrade.name + " upgrade techRequired: " + item.upgrade.techRequired);
+                if (item == null || item.gameObject == null)
+                    continue;
 
-                item.gameObject.GetComponent<UnityEngine.UI.Image>().color = greenColor;
+                var image = item.gameObject.GetComponent<UnityEngine.UI.Image>();
+
+                if (image != null)
+                    image.color = greenColor;
             }
         }
     }

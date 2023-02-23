@@ -1,62 +1,56 @@
-﻿using FNPlugin.Extensions;
-using FNPlugin.Constants;
-using System;
+﻿using System;
+using FNPlugin.Extensions;
+using KSP.Localization;
 using UnityEngine;
 
-namespace FNPlugin
+namespace FNPlugin.Propulsion
 {
+    public class ModuleEnginesThermalNozzle : ModuleEnginesWarp { }
+
+    public class ModuleEnginesMagneticNozzle : ModuleEnginesWarp { }
+
     public class ModuleEnginesWarp : ModuleEnginesFX
     {
         [KSPField(isPersistant = true)]
         bool IsForceActivated;
-        [KSPField(guiActive = false, guiName = "Mass Flow")]
+
+        [KSPField] public double GThreshold = 15;
+        [KSPField] public string propellant1 = "LqdHydrogen";
+        [KSPField] public string propellant2;
+        [KSPField] public string propellant3;
+        [KSPField] public string propellant4;
+
+        [KSPField] public double ratio1 = 1;
+        [KSPField] public double ratio2;
+        [KSPField] public double ratio3;
+        [KSPField] public double ratio4;
+
+        [KSPField] public double demandMass;
+        [KSPField] public double remainingMass;
+
+        [KSPField] public double fuelRatio;
+        [KSPField] private double averageDensityInTonPerLiter;
+        [KSPField] private double massPropellantRatio;
+        [KSPField] private double ratioSumWithoutMass;
+
+        [KSPField] public double massDelta;
+        [KSPField] public double deltaV;
+
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_ModuleEnginesWarp_MassFlow")]//Mass Flow
         public double requestedFlow;
-
-        [KSPField]
-        public double GThreshold = 9;
-        [KSPField]
-        public string propellant1 = "LqdHydrogen";
-        [KSPField]
-        public string propellant2;
-        [KSPField]
-        public string propellant3;
-        [KSPField]
-        public string propellant4;
-
-        [KSPField]
-        public double ratio1 = 1;
-        [KSPField]
-        public double ratio2;
-        [KSPField]
-        public double ratio3;
-        [KSPField]
-        public double ratio4;
-
-        [KSPField]
-        public double demandMass;
-        [KSPField]
-        public double fuelRatio;
-        [KSPField]
-        private double averageDensityInTonPerLiter;
-        [KSPField]
-        private double massPropellantRatio;
-        [KSPField]
-        private double ratioSumWithoutMass;
-        [KSPField]
-        private double ratioHeadingVersusRequest;
-
         [KSPField(guiActive = true, guiName = "#autoLOC_6001377", guiUnits = "#autoLOC_7001408", guiFormat = "F6")]
         public double thrust_d;
 
-        protected double isp_d;
-        protected double throttle_d;
+        private Transform _engineThrustTransform;
+        private Vector3d _engineThrustTransformUp;
 
-        // Persistent values to use during timewarp
-        double _ispPersistent;
-        double _thrustPersistent;
-        double _throttlePersistent;
+        private int _vesselChangedSoiCountdown;
 
-        int vesselChangedSIOCountdown;
+        private double _realIsp;
+        private double _thrustPersistent;
+        private double _throttlePersistent;
+        private double _ratioHeadingVersusRequest;
+        private double _totalMassVessel;
 
         private double fuelWithMassPercentage1;
         private double fuelWithMassPercentage2;
@@ -68,27 +62,27 @@ namespace FNPlugin
         private double masslessFuelPercentage3;
         private double masslessFuelPercentage4;
 
-        public double fuelRequestAmount1 = 0;
-        public double fuelRequestAmount2 = 0;
-        public double fuelRequestAmount3 = 0;
-        public double fuelRequestAmount4 = 0;
+        private double fuelRequestAmount1;
+        private double fuelRequestAmount2;
+        private double fuelRequestAmount3;
+        private double fuelRequestAmount4;
 
-        double consumedPropellant1;
-        double consumedPropellant2;
-        double consumedPropellant3;
-        double consumedPropellant4;
+        private double consumedPropellant1;
+        private double consumedPropellant2;
+        private double consumedPropellant3;
+        private double consumedPropellant4;
 
-        PartResourceDefinition propellantResourceDefinition1;
-        PartResourceDefinition propellantResourceDefinition2;
-        PartResourceDefinition propellantResourceDefinition3;
-        PartResourceDefinition propellantResourceDefinition4;
+        private PartResourceDefinition propellantResourceDefinition1;
+        private PartResourceDefinition propellantResourceDefinition2;
+        private PartResourceDefinition propellantResourceDefinition3;
+        private PartResourceDefinition propellantResourceDefinition4;
 
-        // Are we transitioning from timewarp to reatime?
-        bool _warpToReal = false;
+        // Are we transitioning from timewarp to realtime?
+        private bool _warpToReal;
 
-        public void VesselChangedSOI()
+        public void VesselChangedSoi()
         {
-            vesselChangedSIOCountdown = 10;
+            _vesselChangedSoiCountdown = 10;
         }
 
         // Update
@@ -112,29 +106,29 @@ namespace FNPlugin
             }
 
             // hide stock thrust
-            Fields["finalThrust"].guiActive = false;
+            Fields[nameof(finalThrust)].guiActive = false;
 
             if (IsForceActivated || !isEnabled || !isOperational) return;
 
             IsForceActivated = true;
-            UnityEngine.Debug.Log("[KSPI]: ModuleEngineWarp on " + part.name + " was Force Activated");
+            Debug.Log("[KSPI]: ModuleEngineWarp on " + part.name + " was Force Activated");
             part.force_activate();
         }
 
         private void UpdateFuelFactors()
         {
-            propellantResourceDefinition1 = !String.IsNullOrEmpty(propellant1) ? PartResourceLibrary.Instance.GetDefinition(propellant1) : null;
-            propellantResourceDefinition2 = !String.IsNullOrEmpty(propellant2) ? PartResourceLibrary.Instance.GetDefinition(propellant2) : null;
-            propellantResourceDefinition3 = !String.IsNullOrEmpty(propellant3) ? PartResourceLibrary.Instance.GetDefinition(propellant3) : null;
-            propellantResourceDefinition4 = !String.IsNullOrEmpty(propellant4) ? PartResourceLibrary.Instance.GetDefinition(propellant4) : null;
+            propellantResourceDefinition1 = !string.IsNullOrEmpty(propellant1) ? PartResourceLibrary.Instance.GetDefinition(propellant1) : null;
+            propellantResourceDefinition2 = !string.IsNullOrEmpty(propellant2) ? PartResourceLibrary.Instance.GetDefinition(propellant2) : null;
+            propellantResourceDefinition3 = !string.IsNullOrEmpty(propellant3) ? PartResourceLibrary.Instance.GetDefinition(propellant3) : null;
+            propellantResourceDefinition4 = !string.IsNullOrEmpty(propellant4) ? PartResourceLibrary.Instance.GetDefinition(propellant4) : null;
 
-            var ratioSumOveral = 0.0;
+            var ratioSumOverall = 0.0;
             var ratioSumWithMass = 0.0;
             var densitySum = 0.0;
 
             if (propellantResourceDefinition1 != null)
             {
-                ratioSumOveral += ratio1;
+                ratioSumOverall += ratio1;
                 if (propellantResourceDefinition1.density > 0)
                 {
                     ratioSumWithMass = ratio1;
@@ -143,7 +137,7 @@ namespace FNPlugin
             }
             if (propellantResourceDefinition2 != null)
             {
-                ratioSumOveral += ratio2;
+                ratioSumOverall += ratio2;
                 if (propellantResourceDefinition2.density > 0)
                 {
                     ratioSumWithMass = ratio2;
@@ -152,7 +146,7 @@ namespace FNPlugin
             }
             if (propellantResourceDefinition3 != null)
             {
-                ratioSumOveral += ratio3;
+                ratioSumOverall += ratio3;
                 if (propellantResourceDefinition3.density > 0)
                 {
                     ratioSumWithMass = ratio3;
@@ -161,17 +155,17 @@ namespace FNPlugin
             }
             if (propellantResourceDefinition4 != null)
             {
-                ratioSumOveral += ratio4;
+                ratioSumOverall += ratio4;
                 if (propellantResourceDefinition4.density > 0)
                 {
                     ratioSumWithMass = ratio4;
                     densitySum += propellantResourceDefinition4.density * ratio4;
                 }
             }
-            
+
             averageDensityInTonPerLiter = densitySum / ratioSumWithMass;
-            massPropellantRatio = ratioSumWithMass / ratioSumOveral;
-            ratioSumWithoutMass = ratioSumOveral - ratioSumWithMass;
+            massPropellantRatio = ratioSumWithMass / ratioSumOverall;
+            ratioSumWithoutMass = ratioSumOverall - ratioSumWithMass;
 
             fuelWithMassPercentage1 = propellantResourceDefinition1 != null && propellantResourceDefinition1.density > 0 ? ratio1 / ratioSumWithMass : 0;
             fuelWithMassPercentage2 = propellantResourceDefinition2 != null && propellantResourceDefinition2.density > 0 ? ratio2 / ratioSumWithMass : 0;
@@ -184,7 +178,7 @@ namespace FNPlugin
             masslessFuelPercentage4 = propellantResourceDefinition4 != null && propellantResourceDefinition4.density <= 0 ? ratio4 / ratioSumWithoutMass : 0;
         }
 
-        private double CollectFuel(double demandMass, ResourceFlowMode fuelMode = ResourceFlowMode.STACK_PRIORITY_SEARCH)
+        private double CollectFuel(double requestedMass, ResourceFlowMode fuelMode = ResourceFlowMode.STACK_PRIORITY_SEARCH)
         {
             fuelRequestAmount1 = 0;
             fuelRequestAmount2 = 0;
@@ -194,14 +188,14 @@ namespace FNPlugin
             if (CheatOptions.InfinitePropellant)
                 return 1;
 
-            if (demandMass == 0 || double.IsNaN(demandMass) || double.IsInfinity(demandMass))
+            if (requestedMass == 0 || double.IsNaN(requestedMass) || double.IsInfinity(requestedMass))
                 return 0;
 
-            var propellantWithMassNeededInLiter = demandMass / averageDensityInTonPerLiter;
-            var overalAmountNeeded = propellantWithMassNeededInLiter / massPropellantRatio;
-            var masslessResourceNeeded = overalAmountNeeded - propellantWithMassNeededInLiter;
+            var propellantWithMassNeededInLiter = requestedMass / averageDensityInTonPerLiter;
+            var overallAmountNeeded = propellantWithMassNeededInLiter / massPropellantRatio;
+            var masslessResourceNeeded = overallAmountNeeded - propellantWithMassNeededInLiter;
 
-            // first determine lowest availalable resource ratio
+            // first determine lowest available resource ratio
             double availableRatio = 1;
             if (propellantResourceDefinition1 != null && ratio1 > 0)
             {
@@ -233,55 +227,58 @@ namespace FNPlugin
             consumedPropellant3 = 0;
             consumedPropellant4 = 0;
 
-            double recievedRatio = 1;
+            double receivedRatio = 1;
             if (fuelRequestAmount1 > 0 && !double.IsNaN(fuelRequestAmount1) && !double.IsInfinity(fuelRequestAmount1))
             {
                 consumedPropellant1 = part.RequestResource(propellantResourceDefinition1.id, fuelRequestAmount1 * availableRatio, fuelMode);
-                recievedRatio = Math.Min(recievedRatio, fuelRequestAmount1 > 0 ? consumedPropellant1 / fuelRequestAmount1 : 0);
+                receivedRatio = Math.Min(receivedRatio, fuelRequestAmount1 > 0 ? consumedPropellant1 / fuelRequestAmount1 : 0);
             }
             if (fuelRequestAmount2 > 0 && !double.IsNaN(fuelRequestAmount2) && !double.IsInfinity(fuelRequestAmount2))
             {
                 consumedPropellant2 = part.RequestResource(propellantResourceDefinition2.id, fuelRequestAmount2 * availableRatio, fuelMode);
-                recievedRatio = Math.Min(recievedRatio, fuelRequestAmount2 > 0 ? consumedPropellant2 / fuelRequestAmount2 : 0);
+                receivedRatio = Math.Min(receivedRatio, fuelRequestAmount2 > 0 ? consumedPropellant2 / fuelRequestAmount2 : 0);
             }
             if (fuelRequestAmount3 > 0 && !double.IsNaN(fuelRequestAmount3) && !double.IsInfinity(fuelRequestAmount3))
             {
                 consumedPropellant3 = part.RequestResource(propellantResourceDefinition3.id, fuelRequestAmount3 * availableRatio, fuelMode);
-                recievedRatio = Math.Min(recievedRatio, fuelRequestAmount3 > 0 ? consumedPropellant3 / fuelRequestAmount3 : 0);
+                receivedRatio = Math.Min(receivedRatio, fuelRequestAmount3 > 0 ? consumedPropellant3 / fuelRequestAmount3 : 0);
             }
             if (fuelRequestAmount4 > 0 && !double.IsNaN(fuelRequestAmount4) && !double.IsInfinity(fuelRequestAmount4))
             {
                 consumedPropellant4 = part.RequestResource(propellantResourceDefinition4.id, fuelRequestAmount4 * availableRatio, fuelMode);
-                recievedRatio = Math.Min(recievedRatio, fuelRequestAmount4 > 0 ? consumedPropellant4 / fuelRequestAmount4 : 0);
+                receivedRatio = Math.Min(receivedRatio, fuelRequestAmount4 > 0 ? consumedPropellant4 / fuelRequestAmount4 : 0);
             }
 
-            return Math.Min (recievedRatio, 1);
+            return Math.Min (receivedRatio, 1);
         }
 
         // Physics update
         public override void OnFixedUpdate()
         {
-            if (vesselChangedSIOCountdown > 0)
-                vesselChangedSIOCountdown--;
+            if (_vesselChangedSoiCountdown > 0)
+                _vesselChangedSoiCountdown--;
 
             if (FlightGlobals.fetch == null || !isEnabled) return;
 
             UpdateFuelFactors();
 
-            if (double.IsNaN(this.requestedMassFlow) || double.IsInfinity(requestedMassFlow))
+            if (double.IsNaN(requestedMassFlow) || double.IsInfinity(requestedMassFlow))
                 Debug.LogWarning("[KSPI]: requestedMassFlow  is " + requestedMassFlow);
-            if (double.IsNaN(this.realIsp) || double.IsInfinity(realIsp))
+            if (double.IsNaN(realIsp) || double.IsInfinity(realIsp))
                 Debug.LogWarning("[KSPI]: realIsp  is " + realIsp);
-            if (double.IsNaN(this.finalThrust) || double.IsInfinity(finalThrust))
-                Debug.LogWarning("[KSPI]: finalThrust  is " + finalThrust);
+            if (double.IsNaN(finalThrust) || double.IsInfinity(finalThrust))
+                Debug.LogWarning("[KSPI]: maxEffectiveThrust  is " + finalThrust);
+
+            _realIsp = realIsp;
+
+            requestedFlow = requestedMassFlow;
+            _totalMassVessel = vessel.totalMass;
 
             // Check if we are in time warp mode
             if (!vessel.packed)
             {
-                // allow throtle to be used up to Geeforce treshold
+                // allow throttle to be used up to Geeforce threshold
                 TimeWarp.GThreshold = GThreshold;
-
-                requestedFlow = this.requestedMassFlow;
 
                 demandMass = requestedFlow * (double)(decimal)TimeWarp.fixedDeltaTime;
 
@@ -289,8 +286,6 @@ namespace FNPlugin
                 // Update values to use during timewarp
                 if (!_warpToReal)
                 {
-                    _ispPersistent = realIsp;
-
                     _throttlePersistent = vessel.ctrlState.mainThrottle;
 
                     if (_throttlePersistent == 0 && finalThrust < 0.0000005)
@@ -299,54 +294,61 @@ namespace FNPlugin
                         _thrustPersistent = finalThrust;
                 }
 
-                ratioHeadingVersusRequest = 0;
+                _ratioHeadingVersusRequest = 0;
             }
             else
             {
                 // Timewarp mode: perturb orbit using thrust
                 _warpToReal = true; // Set to true for transition to realtime
 
-                requestedFlow = this.requestedMassFlow;
-
-                _thrustPersistent = requestedFlow * GameConstants.STANDARD_GRAVITY * realIsp;
+                _thrustPersistent = requestedFlow * PhysicsGlobals.GravitationalAcceleration * _realIsp;
 
                 // only persist thrust if active and non zero throttle or significant thrust
                 if (getIgnitionState && (currentThrottle > 0 || _thrustPersistent > 0.0000005))
                 {
-                    ratioHeadingVersusRequest = this.PersistHeading(vesselChangedSIOCountdown > 0, ratioHeadingVersusRequest == 1);
-                    if (ratioHeadingVersusRequest != 1)
-                    {
-                        UnityEngine.Debug.Log("[KSPI]: " + "quit persistant heading: " + ratioHeadingVersusRequest);
+                    _ratioHeadingVersusRequest = vessel.PersistHeading(_vesselChangedSoiCountdown > 0, _ratioHeadingVersusRequest == 1);
+                    if (_ratioHeadingVersusRequest != 1)
                         return;
-                    }
 
-                    // determine maximum deltaV durring this frame
+                    // determine maximum deltaV during this frame
                     demandMass = requestedFlow * (double)(decimal)TimeWarp.fixedDeltaTime;
-                    var remainingMass = this.vessel.totalMass - demandMass;
-                    var deltaV = realIsp * GameConstants.STANDARD_GRAVITY * Math.Log(this.vessel.totalMass / remainingMass);
+                    remainingMass = _totalMassVessel - demandMass;
 
-                    double persistentThrustDot = Vector3d.Dot(this.part.transform.up, vessel.obt_velocity);
+                    deltaV = _realIsp * PhysicsGlobals.GravitationalAcceleration * Math.Log(_totalMassVessel / remainingMass);
+
+                    _engineThrustTransform = part.FindModelTransform(thrustVectorTransformName);
+                    if (_engineThrustTransform == null)
+                    {
+                        _engineThrustTransform = part.transform;
+                        _engineThrustTransformUp = _engineThrustTransform.up;
+                    }
+                    else
+                        _engineThrustTransformUp = (Vector3d)_engineThrustTransform.forward * -1;
+
+                    double persistentThrustDot = Vector3d.Dot(_engineThrustTransformUp, vessel.obt_velocity);
                     if (persistentThrustDot < 0 && (vessel.obt_velocity.magnitude <= deltaV * 2))
                     {
-                        var message = "Thrust warp stopped - orbital speed too low";
+                        var message = Localizer.Format("#LOC_KSPIE_ModuleEnginesWarp_PostMsg1");//"Thrust warp stopped - orbital speed too low"
                         ScreenMessages.PostScreenMessage(message, 5, ScreenMessageStyle.UPPER_CENTER);
                         Debug.Log("[KSPI]: " + message);
                         TimeWarp.SetRate(0, true);
                         return;
                     }
-                    
+
                     fuelRatio = CollectFuel(demandMass, ResourceFlowMode.ALL_VESSEL);
 
                     // Calculate thrust and deltaV if demand output > 0
-                    if (IsPositiveValidNumber(fuelRatio) && IsPositiveValidNumber(demandMass) && IsPositiveValidNumber(this.vessel.totalMass) && IsPositiveValidNumber(_ispPersistent))
+                    if (IsPositiveValidNumber(fuelRatio) && IsPositiveValidNumber(demandMass) && IsPositiveValidNumber(_totalMassVessel) && IsPositiveValidNumber(_realIsp))
                     {
-                        remainingMass = this.vessel.totalMass - (demandMass * fuelRatio); // Mass at end of burn
-                        deltaV = _ispPersistent * GameConstants.STANDARD_GRAVITY * Math.Log(this.vessel.totalMass / remainingMass); // Delta V from burn
-                        vessel.orbit.Perturb(deltaV * (Vector3d)this.part.transform.up, Planetarium.GetUniversalTime()); // Update vessel orbit
+                        remainingMass = vessel.totalMass - (demandMass * fuelRatio); // Mass at end of burn
+
+                        massDelta = Math.Log(_totalMassVessel / remainingMass);
+                        deltaV = _realIsp * PhysicsGlobals.GravitationalAcceleration * massDelta; // Delta V from burn
+                        vessel.orbit.Perturb(deltaV * _engineThrustTransformUp, Planetarium.GetUniversalTime()); // Update vessel orbit
 
                         if (fuelRatio < 0.999)
                         {
-                            var message = "Thrust warp stopped - running out of propellant";
+                            var message = Localizer.Format("#LOC_KSPIE_ModuleEnginesWarp_PostMsg2");//"Thrust warp stopped - running out of propellant"
                             Debug.Log("[KSPI]: " + message);
                             ScreenMessages.PostScreenMessage(message, 5, ScreenMessageStyle.UPPER_CENTER);
                             // Return to realtime
@@ -355,7 +357,7 @@ namespace FNPlugin
                     }
                     else if (demandMass > 0)
                     {
-                        var message = "Thrust warp stopped - propellant depleted";
+                        var message = Localizer.Format("#LOC_KSPIE_ModuleEnginesWarp_PostMsg3");//"Thrust warp stopped - propellant depleted"
                         Debug.Log("[KSPI]: " + message);
                         ScreenMessages.PostScreenMessage(message, 5, ScreenMessageStyle.UPPER_CENTER);
                         // Return to realtime
@@ -364,7 +366,7 @@ namespace FNPlugin
                 }
                 else
                 {
-                    ratioHeadingVersusRequest = this.PersistHeading(vesselChangedSIOCountdown > 0);
+                    _ratioHeadingVersusRequest = vessel.PersistHeading(_vesselChangedSoiCountdown > 0);
 
                     _thrustPersistent = 0;
                     requestedFlow = 0;
@@ -375,13 +377,11 @@ namespace FNPlugin
 
             // Update display numbers
             thrust_d = _thrustPersistent;
-            isp_d = _ispPersistent;
-            throttle_d = _throttlePersistent;
         }
 
-        private bool IsPositiveValidNumber(double vaiable)
+        private bool IsPositiveValidNumber(double variable)
         {
-            return !double.IsNaN(vaiable) && !double.IsInfinity(vaiable) && vaiable > 0;
+            return !double.IsNaN(variable) && !double.IsInfinity(variable) && variable > 0;
         }
 
         // Format thrust into mN, N, kN

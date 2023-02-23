@@ -2,76 +2,76 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace FNPlugin 
+namespace FNPlugin.Powermanagement
 {
-    public class ResourceOvermanager 
+    public class ResourceOvermanager
     {
-        private static Dictionary<String, ResourceOvermanager> resources_managers = new Dictionary<String, ResourceOvermanager>();
+        private static readonly Dictionary<string, ResourceOvermanager> resourceOverManagers = new Dictionary<string, ResourceOvermanager>();
 
-        public Guid Id { get; private set; }
-
-        public static void Reset()
+        public static ResourceOvermanager GetResourceOvermanagerForResource(string resource_name)
         {
-            resources_managers.Clear();
-        }
+            if (resourceOverManagers.TryGetValue(resource_name, out ResourceOvermanager fnro))
+                return fnro;
 
-        public static ResourceOvermanager getResourceOvermanagerForResource(String resource_name) 
-        {
-            ResourceOvermanager fnro = null;
-
-            if (!resources_managers.TryGetValue(resource_name, out fnro))
-            {
-                fnro = new ResourceOvermanager(resource_name);
-                if (resource_name == ResourceManager.FNRESOURCE_MEGAJOULES)
-                    Debug.Log("[KSPI]: Created new ResourceOvermanager for resource " + resource_name + " with Id" + fnro.Id);
-                resources_managers.Add(resource_name, fnro);
-            }
+            fnro = new ResourceOvermanager(resource_name);
+            Debug.Log("[KSPI]: Created new ResourceOvermanager for resource " + resource_name + " with ID " + fnro.Id);
+            resourceOverManagers.Add(resource_name, fnro);
 
             return fnro;
         }
 
-        protected Dictionary<Vessel, ResourceManager> managers;
-        protected String resource_name;
+        public static void Reset()
+        {
+            resourceOverManagers.Clear();
+        }
 
-        public ResourceOvermanager(String name) 
+        public static void ResetForVessel(Vessel vess)
+        {
+            foreach (var pair in resourceOverManagers)
+                pair.Value.DeleteManagerForVessel(vess);
+        }
+
+        public Guid Id { get; }
+
+        protected readonly IDictionary<Vessel, ResourceManager> managers;
+        protected string resourceName;
+
+        public ResourceOvermanager(string name)
         {
             Id = Guid.NewGuid();
             managers = new Dictionary<Vessel, ResourceManager>();
-            this.resource_name = name;
+            resourceName = name;
         }
 
-        public bool hasManagerForVessel(Vessel vess) 
+        public ResourceManager CreateManagerForVessel(ResourceSuppliableModule pm)
         {
-            return managers.ContainsKey(vess);
+            var resourceManager = ResourceManagerFactory.Create(Id, pm, resourceName);
+            managers.Add(pm.vessel, resourceManager);
+            return resourceManager;
         }
 
-        public ResourceManager getManagerForVessel(Vessel vess) 
-        {
-            if (vess == null)
-                return null;
-
-            ResourceManager manager;
-
-            managers.TryGetValue(vess, out manager);
-
-            return manager;
-        }
-
-        public void deleteManagerForVessel(Vessel vess) 
+        public void DeleteManagerForVessel(Vessel vess)
         {
             managers.Remove(vess);
         }
 
-        public void deleteManager(ResourceManager manager) 
+        public void DeleteManager(ResourceManager manager)
         {
             managers.Remove(manager.Vessel);
         }
 
-        public ResourceManager CreateManagerForVessel(PartModule pm) 
+        public ResourceManager GetManagerForVessel(Vessel vess)
         {
-            ResourceManager resourcemanager = new ResourceManager(Id, pm, resource_name);
-            managers.Add(pm.vessel, resourcemanager);
-            return resourcemanager;
+            if (vess == null)
+                return null;
+
+            managers.TryGetValue(vess, out ResourceManager manager);
+            return manager;
+        }
+
+        public bool HasManagerForVessel(Vessel vess)
+        {
+            return managers.ContainsKey(vess);
         }
     }
 }

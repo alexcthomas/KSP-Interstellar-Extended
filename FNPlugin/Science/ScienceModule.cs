@@ -2,106 +2,76 @@
 using FNPlugin.Refinery;
 using System;
 using System.Linq;
+using FNPlugin.Powermanagement;
+using FNPlugin.Refinery.Activity;
+using FNPlugin.Resources;
 using UnityEngine;
+using KSP.Localization;
 
-namespace FNPlugin 
+namespace FNPlugin
 {
     class ScienceModule : ResourceSuppliableModule, ITelescopeController, IUpgradeableModule
     {
         // persistant true
-        [KSPField(isPersistant = true)]
-        public bool IsEnabled;
-        [KSPField(isPersistant = true)]
-        public int active_mode = 0;
-        [KSPField(isPersistant = true)]
-        public double last_active_time;
-        [KSPField(isPersistant = true)]
-        public double electrical_power_ratio;
-        //[KSPField(isPersistant = true)]
-        //public double science_to_add;
+        [KSPField(isPersistant = true)] public bool IsEnabled;
+        [KSPField(isPersistant = true)] public int active_mode = 0;
+        [KSPField(isPersistant = true)] public double last_active_time;
+        [KSPField(isPersistant = true)] public double electrical_power_ratio;
+        [KSPField(isPersistant = true)] public bool isupgraded;
 
-        [KSPField(isPersistant = false, guiActive = true, guiName = "Activity")]
+        [KSPField(guiActive = true, guiName = "#LOC_KSPIE_ScienceModule_Activity")]//Activity
         public string statusTitle;
-        [KSPField(isPersistant = false, guiActive = true, guiName = "Power")]
+        [KSPField(guiActive = true, guiName = "#LOC_KSPIE_ScienceModule_Power")]//Power
         public string powerStr;
-        //[KSPField(isPersistant = false, guiActive = false, guiName = "Data Scan Rate")]
-        //public string scienceRate;
-        //[KSPField(isPersistant = false, guiActive = false, guiName = "Scanned Data")]
-        //public string collectedScience;
-        [KSPField(isPersistant = false, guiActive = true, guiName = "R")]
-        public string reprocessingRate;
-        [KSPField(isPersistant = false, guiActive = true, guiName = "A")]
-        public string antimatterRate;
-        [KSPField(isPersistant = false, guiActive = true, guiName = "E")]
-        public string electrolysisRate;
-        [KSPField(isPersistant = false, guiActive = true, guiName = "C")]
-        public string centrifugeRate;
-        [KSPField(isPersistant = false, guiActive = true, guiName = "Antimatter Efficiency")]
+
+        [KSPField(guiActive = true, guiName = "R")] public string reprocessingRate;
+        [KSPField(guiActive = true, guiName = "A")] public string antimatterRate;
+        [KSPField(guiActive = true, guiName = "E")] public string electrolysisRate;
+        [KSPField(guiActive = true, guiName = "C")] public string centrifugeRate;
+
+        [KSPField(guiActive = true, guiName = "#LOC_KSPIE_ScienceModule_AntimatterEfficiency")]//Antimatter Efficiency
         public string antimatterProductionEfficiency;
-        //[KSPField(isPersistant = false)]
-        //public string beginResearchName = "Begin Scanning";
-        [KSPField(isPersistant = false, guiActive = true, guiName = "Data Processing Multiplier")] 
+
+        [KSPField(guiActive = true, guiName = "#LOC_KSPIE_ScienceModule_DataProcessingMultiplier")] //Data Processing Multiplier
         public float dataProcessingMultiplier;
 
+        [KSPField] public string Mk2Tech = "longTermScienceTech";
+        [KSPField] public string Mk3Tech = "scientificOutposts";
+        [KSPField] public string Mk4Tech = "highEnergyScience";
+        [KSPField] public string Mk5Tech = "appliedHighEnergyPhysics";
+        [KSPField] public string Mk6Tech = "ultraHighEnergyPhysics";
+        [KSPField] public string Mk7Tech = "extremeHighEnergyPhysics";
 
-        [KSPField(isPersistant = false)]
-        public string Mk2Tech = "longTermScienceTech";
-        [KSPField(isPersistant = false)]
-        public string Mk3Tech = "scientificOutposts";
-        [KSPField(isPersistant = false)]
-        public string Mk4Tech = "highEnergyScience";
-        [KSPField(isPersistant = false)]
-        public string Mk5Tech = "appliedHighEnergyPhysics";
-        [KSPField(isPersistant = false)]
-        public string Mk6Tech = "ultraHighEnergyPhysics";
-        [KSPField(isPersistant = false)]
-        public string Mk7Tech = "extremeHighEnergyPhysics";
+        [KSPField] public int Mk1ScienceCap = 1000;
+        [KSPField] public int Mk2ScienceCap = 1600;
+        [KSPField] public int Mk3ScienceCap = 2500;
+        [KSPField] public int Mk4ScienceCap = 4000;
+        [KSPField] public int Mk5ScienceCap = 6350;
+        [KSPField] public int Mk6ScienceCap = 10000;
+        [KSPField] public int Mk7ScienceCap = 16000;
 
+        // persistent false
+        [KSPField] public string animName1 = "";
+        [KSPField] public string animName2 = "";
+        [KSPField] public string upgradeTechReq = null;
+        [KSPField] public float upgradeCost = 20;
 
-        [KSPField(isPersistant = false)]
-        public int Mk1ScienceCap = 1000;
-        [KSPField(isPersistant = false)]
-        public int Mk2ScienceCap = 1600;
-        [KSPField(isPersistant = false)]
-        public int Mk3ScienceCap = 2500;
-        [KSPField(isPersistant = false)]
-        public int Mk4ScienceCap = 4000;
-        [KSPField(isPersistant = false)]
-        public int Mk5ScienceCap = 6350;
-        [KSPField(isPersistant = false)]
-        public int Mk6ScienceCap = 10000;
-        [KSPField(isPersistant = false)]
-        public int Mk7ScienceCap = 16000;
-
-
-        // persistant false
-        [KSPField(isPersistant = false)]
-        public string animName1 = "";
-        [KSPField(isPersistant = false)]
-        public string animName2 = "";
-        [KSPField(isPersistant = false)]
-        public string upgradeTechReq = null;
-        [KSPField(isPersistant = false)]
-        public float upgradeCost = 20;
-        [KSPField(isPersistant = true)]
-        public bool isupgraded = false;
-        [KSPField(isPersistant = false)]
-        public float powerReqMult = 1;
-        [KSPField(isPersistant = false)] 
-        public float baseDataStorage = 750;
+        [KSPField] public float powerReqMult = 1;
+        [KSPField] public float baseDataStorage = 750;
 
         protected int techLevel;
-        protected float megajoules_supplied = 0;
-        protected String[] modes = { "Scanning", "Reprocessing", "Producing Antimatter", "Electrolysing", "Centrifuging" };
-        protected double science_rate_f;
-        protected double reprocessing_rate_f = 0;
-        protected float crew_capacity_ratio;
-        protected double antimatter_rate_f = 0;
 
-        protected float electrolysis_rate_f = 0;
-        protected double deut_rate_f = 0;
+        protected string[] modes = { "Scanning", "Reprocessing", "Producing Antimatter", "Electrolysing", "Centrifuging" };
+
+        protected double science_rate_f;
+        protected double reprocessing_rate_f;
+        protected float crew_capacity_ratio;
+        protected double antimatter_rate_f;
+
+        protected float electrolysis_rate_f;
+        protected double deut_rate_f;
         protected bool play_down = true;
-        protected bool hasrequiredupgrade = false;
+        protected bool hasrequiredupgrade;
 
         protected Animation anim;
         protected Animation anim2;
@@ -109,12 +79,8 @@ namespace FNPlugin
         protected AntimatterGenerator antimatterGenerator;
         protected ModuleScienceConverter moduleScienceConverter;
         protected ModuleScienceLab moduleScienceLab;
-        
 
-        public bool CanProvideTelescopeControl
-        {
-            get { return part.protoModuleCrew.Count > 0; }
-        }
+        public bool CanProvideTelescopeControl => part.protoModuleCrew.Count > 0;
 
         /*
         [KSPEvent(guiActive = true, guiName = "Begin Scanning", active = true)]
@@ -171,8 +137,8 @@ namespace FNPlugin
             return 0;
         }
 
-        [KSPEvent(guiActive = true, guiName = "Reprocess Nuclear Fuel", active = true)]
-        public void ReprocessFuel() 
+        [KSPEvent(guiActive = true, guiName = "#LOC_KSPIE_ScienceModule_ReprocessNuclearFuel", active = true)]//Reprocess Nuclear Fuel
+        public void ReprocessFuel()
         {
             if (crew_capacity_ratio == 0) return;
 
@@ -188,8 +154,8 @@ namespace FNPlugin
             play_down = true;
         }
 
-        [KSPEvent(guiActive = true, guiName = "Activate Antimatter Production", active = true)]
-        public void ActivateFactory() 
+        [KSPEvent(guiActive = true, guiName = "#LOC_KSPIE_ScienceModule_ActivateAntimatterProduction", active = true)]//Activate Antimatter Production
+        public void ActivateFactory()
         {
             if (crew_capacity_ratio == 0) return;
 
@@ -205,8 +171,8 @@ namespace FNPlugin
             play_down = true;
         }
 
-        [KSPEvent(guiActive = true, guiName = "Activate Electrolysis", active = true)]
-        public void ActivateElectrolysis() 
+        [KSPEvent(guiActive = true, guiName = "#LOC_KSPIE_ScienceModule_ActivateElectrolysis", active = true)]//Activate Electrolysis
+        public void ActivateElectrolysis()
         {
             if (crew_capacity_ratio == 0) return;
 
@@ -222,8 +188,8 @@ namespace FNPlugin
             play_down = true;
         }
 
-        [KSPEvent(guiActive = true, guiName = "Activate Centrifuge", active = true)]
-        public void ActivateCentrifuge() 
+        [KSPEvent(guiActive = true, guiName = "#LOC_KSPIE_ScienceModule_ActivateCentrifuge", active = true)]//Activate Centrifuge
+        public void ActivateCentrifuge()
         {
             if (crew_capacity_ratio == 0) return;
 
@@ -239,13 +205,13 @@ namespace FNPlugin
             play_down = true;
         }
 
-        [KSPEvent(guiActive = true, guiName = "Stop Current Activity", active = false)]
-        public void StopActivity() 
+        [KSPEvent(guiActive = true, guiName = "#LOC_KSPIE_ScienceModule_StopCurrentActivity", active = false)]//Stop Current Activity
+        public void StopActivity()
         {
             IsEnabled = false;
         }
 
-        [KSPEvent(guiActive = true, guiName = "Retrofit", active = true)]
+        [KSPEvent(guiActive = true, guiName = "#LOC_KSPIE_ScienceModule_Retrofit", active = true)]//Retrofit
         public void RetrofitEngine()
         {
             if (ResearchAndDevelopment.Instance == null || isupgraded || ResearchAndDevelopment.Instance.Science < upgradeCost) return;
@@ -254,7 +220,7 @@ namespace FNPlugin
             ResearchAndDevelopment.Instance.AddScience(-upgradeCost, TransactionReasons.RnDPartPurchase);
         }
 
-        public String UpgradeTechnology { get { return upgradeTechReq; } }
+        public string UpgradeTechnology => upgradeTechReq;
 
         public void upgradePartModule()
         {
@@ -262,7 +228,7 @@ namespace FNPlugin
             isupgraded = true;
         }
 
-        public override void OnStart(PartModule.StartState state)
+        public override void OnStart(StartState state)
         {
             moduleScienceLab = part.FindModuleImplementing<ModuleScienceLab>();
             moduleScienceConverter = part.FindModuleImplementing<ModuleScienceConverter>();
@@ -306,17 +272,17 @@ namespace FNPlugin
             */
 
             reprocessor = new NuclearFuelReprocessor();
-            reprocessor.Initialize(part);
-            antimatterGenerator = new AntimatterGenerator(part, 1, PartResourceLibrary.Instance.GetDefinition(InterstellarResourcesConfiguration.Instance.Antimatter));
+            reprocessor.Initialize(part, null);
+            antimatterGenerator = new AntimatterGenerator(part, 1, PartResourceLibrary.Instance.GetDefinition(ResourceSettings.Config.AntiProtium));
 
-            UnityEngine.Debug.Log("[KSPI]: ScienceModule on " + part.name + " was Force Activated");
+            Debug.Log("[KSPI]: ScienceModule on " + part.name + " was Force Activated");
             part.force_activate();
 
             anim = part.FindModelAnimators(animName1).FirstOrDefault();
             anim2 = part.FindModelAnimators(animName2).FirstOrDefault();
-            if (anim != null && anim2 != null) 
+            if (anim != null && anim2 != null)
             {
-                if (IsEnabled) 
+                if (IsEnabled)
                 {
                     //anim [animName1].normalizedTime = 1f;
                     //anim2 [animName2].normalizedTime = 1f;
@@ -324,8 +290,8 @@ namespace FNPlugin
                     //anim2 [animName2].speed = -1f;
                     anim.Blend(animName1, 1, 0);
                     anim2.Blend(animName2, 1, 0);
-                } 
-                else 
+                }
+                else
                 {
                     //anim [animName1].normalizedTime = 0f;
                     //anim2 [animName2].normalizedTime = 0f;
@@ -339,11 +305,11 @@ namespace FNPlugin
                 //anim2.Play ();
             }
 
-            if (IsEnabled && last_active_time != 0) 
+            if (IsEnabled && last_active_time != 0)
             {
-                double global_rate_multipliers = 1;
-                crew_capacity_ratio = ((float)(part.protoModuleCrew.Count)) / ((float)part.CrewCapacity);
-                global_rate_multipliers = global_rate_multipliers * crew_capacity_ratio;
+                double globalRateMultipliers = 1;
+                crew_capacity_ratio = part.protoModuleCrew.Count / (float)part.CrewCapacity;
+                globalRateMultipliers = globalRateMultipliers * crew_capacity_ratio;
 
                 /*
                 if (active_mode == 0) // Science persistence
@@ -360,26 +326,25 @@ namespace FNPlugin
                     science_to_add += science_to_increment;
 
                 }
-                else 
+                else
                 */
                 if (active_mode == 2) // Antimatter persistence
                 {
                     var deltaTime = Planetarium.GetUniversalTime() - last_active_time;
 
-                    var electrical_power_provided_in_Megajoules = electrical_power_ratio * global_rate_multipliers * powerReqMult * PluginHelper.BaseAMFPowerConsumption * deltaTime;
+                    var electricalPowerProvidedInMegajoules = electrical_power_ratio * globalRateMultipliers * powerReqMult * PluginSettings.Config.BaseAMFPowerConsumption * deltaTime;
 
-                    antimatterGenerator.Produce(electrical_power_provided_in_Megajoules);
+                    antimatterGenerator.Produce(electricalPowerProvidedInMegajoules);
                 }
             }
         }
 
-        public override void OnUpdate() 
+        public override void OnUpdate()
         {
             base.OnUpdate();
 
             try
             {
-                //Events["BeginResearch"].active = isupgraded && !IsEnabled;
                 Events["ReprocessFuel"].active = !IsEnabled;
                 Events["ActivateFactory"].active = isupgraded && !IsEnabled;
                 Events["ActivateElectrolysis"].active = false;
@@ -394,7 +359,7 @@ namespace FNPlugin
 
             try
             {
-                // only show retrofit btoon if we can actualy upgrade
+                // only show retrofit if we can actualy upgrade
                 Events["RetrofitEngine"].active = ResearchAndDevelopment.Instance == null ? false : !isupgraded && ResearchAndDevelopment.Instance.Science >= upgradeCost && hasrequiredupgrade;
             }
             catch (Exception e)
@@ -402,7 +367,7 @@ namespace FNPlugin
                 Debug.LogError("[KSPI]: ScienceModule OnUpdate 2 " + e.Message);
             }
 
-            if (IsEnabled) 
+            if (IsEnabled)
             {
                 try
                 {
@@ -432,11 +397,11 @@ namespace FNPlugin
                     Debug.LogError("[KSPI]: ScienceModule 4 " + e.Message);
                 }
 
-                double currentpowertmp = electrical_power_ratio * PluginHelper.BasePowerConsumption * powerReqMult;
+                double currentpowertmp = electrical_power_ratio * PluginSettings.Config.BasePowerConsumption * powerReqMult;
 
                 try
                 {
-                    powerStr = currentpowertmp.ToString("0.0000") + "MW / " + (powerReqMult * PluginHelper.BasePowerConsumption).ToString("0.0000") + "MW";
+                    powerStr = currentpowertmp.ToString("0.0000") + "MW / " + (powerReqMult * PluginSettings.Config.BasePowerConsumption).ToString("0.0000") + "MW";
                 }
                 catch (Exception e)
                 {
@@ -452,14 +417,14 @@ namespace FNPlugin
                     scienceRate = scienceratetmp.ToString("0.0000") + "/Day";
                     collectedScience = science_to_add.ToString("0.000000");
                 }
-                else 
+                else
                 */
                 if (active_mode == 1) // Fuel Reprocessing
                 {
                     try
                     {
                         Fields["reprocessingRate"].guiActive = true;
-                        reprocessingRate = reprocessing_rate_f.ToString("0.0") + " Hours Remaining";
+                        reprocessingRate = Localizer.Format("#LOC_KSPIE_ScienceModule_Reprocessing", reprocessing_rate_f.ToString("0.0"));// + " Hours Remaining"
                     }
                     catch (Exception e)
                     {
@@ -470,21 +435,21 @@ namespace FNPlugin
                 {
                     try
                     {
-                        currentpowertmp = electrical_power_ratio * PluginHelper.BaseAMFPowerConsumption * powerReqMult;
+                        currentpowertmp = electrical_power_ratio * PluginSettings.Config.BaseAMFPowerConsumption * powerReqMult;
                         Fields["antimatterRate"].guiActive = true;
                         Fields["antimatterProductionEfficiency"].guiActive = true;
-                        powerStr = currentpowertmp.ToString("0.00") + "MW / " + (powerReqMult * PluginHelper.BaseAMFPowerConsumption).ToString("0.00") + "MW";
+                        powerStr = currentpowertmp.ToString("0.00") + "MW / " + (powerReqMult * PluginSettings.Config.BaseAMFPowerConsumption).ToString("0.00") + "MW";
                         antimatterProductionEfficiency = (antimatterGenerator.Efficiency * 100).ToString("0.0000") + "%";
-                        double antimatter_rate_per_day = antimatter_rate_f * PluginHelper.SecondsInDay;
+                        double antimatterRatePerDay = antimatter_rate_f * PluginSettings.Config.SecondsInDay;
 
-                        if (antimatter_rate_per_day > 0.1)
-                            antimatterRate = (antimatter_rate_per_day).ToString("0.0000") + " mg/day";
+                        if (antimatterRatePerDay > 0.1)
+                            antimatterRate = (antimatterRatePerDay).ToString("0.0000") + " mg/day";
                         else
                         {
-                            if (antimatter_rate_per_day > 0.1e-3)
-                                antimatterRate = (antimatter_rate_per_day * 1e3).ToString("0.0000") + " ug/day";
+                            if (antimatterRatePerDay > 0.1e-3)
+                                antimatterRate = (antimatterRatePerDay * 1e3).ToString("0.0000") + " ug/day";
                             else
-                                antimatterRate = (antimatter_rate_per_day * 1e6).ToString("0.0000") + " ng/day";
+                                antimatterRate = (antimatterRatePerDay * 1e6).ToString("0.0000") + " ng/day";
                         }
                     }
                     catch (Exception e)
@@ -494,28 +459,28 @@ namespace FNPlugin
                 }
                 else if (active_mode == 3) // Electrolysis
                 {
-                    currentpowertmp = electrical_power_ratio * PluginHelper.BaseELCPowerConsumption * powerReqMult;
+                    currentpowertmp = electrical_power_ratio * PluginSettings.Config.BaseELCPowerConsumption * powerReqMult;
                     Fields["electrolysisRate"].guiActive = true;
-                    double electrolysisratetmp = -electrolysis_rate_f * PluginHelper.SecondsInDay;
+                    double electrolysisratetmp = -electrolysis_rate_f * PluginSettings.Config.SecondsInDay;
                     electrolysisRate = electrolysisratetmp.ToString("0.0") + "mT/day";
-                    powerStr = currentpowertmp.ToString("0.00") + "MW / " + (powerReqMult * PluginHelper.BaseELCPowerConsumption).ToString("0.00") + "MW";
+                    powerStr = currentpowertmp.ToString("0.00") + "MW / " + (powerReqMult * PluginSettings.Config.BaseELCPowerConsumption).ToString("0.00") + "MW";
                 }
                 else if (active_mode == 4) // Centrifuge
                 {
-                    currentpowertmp = electrical_power_ratio * PluginHelper.BaseCentriPowerConsumption * powerReqMult;
+                    currentpowertmp = electrical_power_ratio * PluginSettings.Config.BaseCentriPowerConsumption * powerReqMult;
                     Fields["centrifugeRate"].guiActive = true;
-                    powerStr = currentpowertmp.ToString("0.00") + "MW / " + (powerReqMult * PluginHelper.BaseCentriPowerConsumption).ToString("0.00") + "MW";
-                    double deut_per_hour = deut_rate_f * 3600;
-                    centrifugeRate = deut_per_hour.ToString("0.00") + " Kg Deuterium/Hour";
+                    powerStr = currentpowertmp.ToString("0.00") + "MW / " + (powerReqMult * PluginSettings.Config.BaseCentriPowerConsumption).ToString("0.00") + "MW";
+                    double deutPerHour = deut_rate_f * 3600;
+                    centrifugeRate = Localizer.Format("#LOC_KSPIE_ScienceModule_Centrifuge", deutPerHour.ToString("0.00"));// + " Kg Deuterium/Hour"
                 }
                 else
-                { 
-                    // nothing 
+                {
+                    // nothing
                 }
-            } 
-            else 
+            }
+            else
             {
-                if (play_down) 
+                if (play_down)
                 {
                     if (anim != null)
                     {
@@ -555,17 +520,17 @@ namespace FNPlugin
                     Debug.LogError("[KSPI]: OnUpdate Else " + e.Message);
                 }
 
-                if (crew_capacity_ratio > 0) 
-                    statusTitle = "Idle";
-                else 
-                    statusTitle = "Not enough crew";
+                if (crew_capacity_ratio > 0)
+                    statusTitle = Localizer.Format("#LOC_KSPIE_ScienceModule_Idle");//"Idle"
+                else
+                    statusTitle = Localizer.Format("#LOC_KSPIE_ScienceModule_Notenoughcrew");//"Not enough crew"
             }
         }
 
         private float GetKerbalScienceFactor(ProtoCrewMember kerbal)
         {
             float kerbalFactor;
-            
+
             // initialise with profession
             if (kerbal.experienceTrait.Title == "Scientist")
                 kerbalFactor = 1.5f;
@@ -583,9 +548,9 @@ namespace FNPlugin
 
         public override void OnFixedUpdate()
         {
-            double global_rate_multipliers = 1;
+            double globalRateMultipliers = 1;
             crew_capacity_ratio = ((float)part.protoModuleCrew.Count) / ((float)part.CrewCapacity);
-            global_rate_multipliers = global_rate_multipliers * crew_capacity_ratio;
+            globalRateMultipliers = globalRateMultipliers * crew_capacity_ratio;
 
             if (!IsEnabled) return;
 
@@ -613,37 +578,37 @@ namespace FNPlugin
                     science_to_add += science_rate_f * TimeWarp.fixedDeltaTime;
                 }
             }
-            else 
+            else
             */
             if (active_mode == 1) // Fuel Reprocessing
             {
-                var powerRequest = powerReqMult * PluginHelper.BasePowerConsumption * TimeWarp.fixedDeltaTime;
+                var powerRequest = powerReqMult * PluginSettings.Config.BasePowerConsumption * TimeWarp.fixedDeltaTime;
 
-                double electrical_power_provided = CheatOptions.InfiniteElectricity 
+                double electricalPowerProvided = CheatOptions.InfiniteElectricity
                     ? powerRequest
-                    : consumeFNResource(powerRequest, ResourceManager.FNRESOURCE_MEGAJOULES);
-                
-                electrical_power_ratio = electrical_power_provided / TimeWarp.fixedDeltaTime / PluginHelper.BasePowerConsumption / powerReqMult;
+                    : consumeFNResource(powerRequest, ResourceSettings.Config.ElectricPowerInMegawatt);
 
-                var productionModifier = global_rate_multipliers;
-                global_rate_multipliers = global_rate_multipliers * electrical_power_ratio;
-                reprocessor.UpdateFrame(global_rate_multipliers, electrical_power_ratio, productionModifier, true, TimeWarp.fixedDeltaTime);
-                
-                if (reprocessor.getActinidesRemovedPerHour() > 0)
-                    reprocessing_rate_f = reprocessor.getRemainingAmountToReprocess() / reprocessor.getActinidesRemovedPerHour();
+                electrical_power_ratio = electricalPowerProvided / TimeWarp.fixedDeltaTime / PluginSettings.Config.BasePowerConsumption / powerReqMult;
+
+                var productionModifier = globalRateMultipliers;
+                globalRateMultipliers = globalRateMultipliers * electrical_power_ratio;
+                reprocessor.UpdateFrame(globalRateMultipliers, electrical_power_ratio, productionModifier, true, TimeWarp.fixedDeltaTime);
+
+                if (reprocessor.GetActinidesRemovedPerHour() > 0)
+                    reprocessing_rate_f = reprocessor.GetRemainingAmountToReprocess() / reprocessor.GetActinidesRemovedPerHour();
                 else
                     IsEnabled = false;
             }
             else if (active_mode == 2) //Antimatter
-            { 
-                var powerRequestInMegajoules = powerReqMult * PluginHelper.BaseAMFPowerConsumption * TimeWarp.fixedDeltaTime;
+            {
+                var powerRequestInMegajoules = powerReqMult * PluginSettings.Config.BaseAMFPowerConsumption * TimeWarp.fixedDeltaTime;
 
-                var energy_provided_in_megajoules = CheatOptions.InfiniteElectricity 
+                var energyProvidedInMegajoules = CheatOptions.InfiniteElectricity
                     ? powerRequestInMegajoules
-                    : consumeFNResource(powerRequestInMegajoules, ResourceManager.FNRESOURCE_MEGAJOULES);
+                    : consumeFNResource(powerRequestInMegajoules, ResourceSettings.Config.ElectricPowerInMegawatt);
 
-                electrical_power_ratio = powerRequestInMegajoules > 0 ? energy_provided_in_megajoules / powerRequestInMegajoules : 0;
-                antimatterGenerator.Produce(energy_provided_in_megajoules * global_rate_multipliers);
+                electrical_power_ratio = powerRequestInMegajoules > 0 ? energyProvidedInMegajoules / powerRequestInMegajoules : 0;
+                antimatterGenerator.Produce(energyProvidedInMegajoules * globalRateMultipliers);
                 antimatter_rate_f = antimatterGenerator.ProductionRate;
             }
             else if (active_mode == 3)
@@ -651,23 +616,23 @@ namespace FNPlugin
                 IsEnabled = false;
             }
             else if (active_mode == 4) // Centrifuge
-            { 
+            {
                 if (vessel.Splashed)
                 {
-                    var powerRequest = powerReqMult * PluginHelper.BaseCentriPowerConsumption * TimeWarp.fixedDeltaTime;
+                    var powerRequest = powerReqMult * PluginSettings.Config.BaseCentriPowerConsumption * TimeWarp.fixedDeltaTime;
 
-                    double electrical_power_provided = CheatOptions.InfiniteElectricity 
+                    double electricalPowerProvided = CheatOptions.InfiniteElectricity
                         ? powerRequest
-                        : consumeFNResource(powerRequest, ResourceManager.FNRESOURCE_MEGAJOULES);
-                    
-                    electrical_power_ratio = electrical_power_provided / TimeWarp.fixedDeltaTime / PluginHelper.BaseCentriPowerConsumption / powerReqMult;
-                    global_rate_multipliers = global_rate_multipliers * electrical_power_ratio;
-                    double deut_produced = global_rate_multipliers * GameConstants.deuterium_timescale * GameConstants.deuterium_abudance * 1000.0f;
-                    deut_rate_f = -part.RequestResource(InterstellarResourcesConfiguration.Instance.LqdDeuterium, -deut_produced * TimeWarp.fixedDeltaTime) / TimeWarp.fixedDeltaTime;
+                        : consumeFNResource(powerRequest, ResourceSettings.Config.ElectricPowerInMegawatt);
+
+                    electrical_power_ratio = electricalPowerProvided / TimeWarp.fixedDeltaTime / PluginSettings.Config.BaseCentriPowerConsumption / powerReqMult;
+                    globalRateMultipliers = globalRateMultipliers * electrical_power_ratio;
+                    double deutProduced = globalRateMultipliers * GameConstants.deuterium_timescale * GameConstants.deuterium_abudance * 1000.0f;
+                    deut_rate_f = -part.RequestResource(ResourceSettings.Config.DeuteriumLqd, -deutProduced * TimeWarp.fixedDeltaTime) / TimeWarp.fixedDeltaTime;
                 }
                 else
                 {
-                    ScreenMessages.PostScreenMessage("You must be splashed down to perform this activity.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                    ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_KSPIE_ScienceModule_Postmsg"), 5.0f, ScreenMessageStyle.UPPER_CENTER);//"You must be splashed down to perform this activity."
                     IsEnabled = false;
                 }
             }
@@ -726,14 +691,13 @@ namespace FNPlugin
         }
         */
 
-        public override string getResourceManagerDisplayName() 
+        public override string getResourceManagerDisplayName()
         {
-            if (IsEnabled) 
-                return "Science Lab (" + modes[active_mode] + ")";
-            
-            return "Science Lab";
-        }
+            if (IsEnabled)
+                return Localizer.Format("#LOC_KSPIE_ScienceModule_ResourceManagerDisplayName", modes[active_mode]);//"Science Lab (" +  + ")"
 
+            return Localizer.Format("#LOC_KSPIE_ScienceModule_ResourceManagerDisplayName2");//"Science Lab"
+        }
 
     }
 }

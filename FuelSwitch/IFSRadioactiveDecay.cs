@@ -1,79 +1,134 @@
-﻿using System;
+﻿using KSP.Localization;
+using System;
 
-namespace InterstellarFuelSwitch 
+namespace InterstellarFuelSwitch
 {
     [KSPModule("Radioactive Decay")]
-    class IFSRadioactiveDecay : PartModule 
+    class IFSRadioactiveDecay : PartModule
     {
-        // Persistent False
+        // isPersistent
+        [KSPField(isPersistant = true)]
+        public double lastActiveTime = 1;
+
+        // Settings
         [KSPField(isPersistant = false)]
-        public double decayConstant = 0;
+        public double halfLifeInYears = 0;
+        [KSPField(isPersistant = false)]
+        public double halfLifeInDays = 0;
+        [KSPField(isPersistant = false)]
+        public double decayConstant;
         [KSPField(isPersistant = false)]
         public string resourceName = "";
         [KSPField(isPersistant = false)]
         public string decayProduct = "";
         [KSPField(isPersistant = false)]
-        public double convFactor = 1;
-        [KSPField(isPersistant = true)]
-        public double lastActiveTime = 1;
+        public bool canConvertVolume = true;
 
-        protected double density_rat = 1;
+        private double _densityRat = 1;
+        private PartResourceDefinition _decayProductDefinition;
 
-        private bool resourceDefinitionsContainDecayProduct;
-
-        public override void OnStart(PartModule.StartState state)
+        public override void OnStart(StartState state)
         {
-            double time_diff = lastActiveTime - Planetarium.GetUniversalTime();
-
-            if (state == StartState.Editor)
+            var decayResource = part.Resources[resourceName];
+            if (decayResource == null)
                 return;
 
-            var decay_resource = part.Resources[resourceName];
-            if (decay_resource == null)
+            if (halfLifeInYears > 0)
+                decayConstant = Math.Log(2) / (halfLifeInYears * 365.25 * 24 * 60 * 60);
+
+            if (halfLifeInDays > 0)
+                decayConstant = Math.Log(2) / (halfLifeInDays * 24 * 60 * 60);
+
+            _decayProductDefinition = PartResourceLibrary.Instance.GetDefinition(decayProduct);
+            if (_decayProductDefinition != null)
+            {
+                var decayDensity = _decayProductDefinition.density;
+                if (decayDensity > 0 && decayResource.info.density > 0)
+                    _densityRat = (double)(decimal)decayResource.info.density / (double)(decimal)_decayProductDefinition.density;
+            }
+
+            if (state == StartState.Editor || CheatOptions.UnbreakableJoints)
                 return;
 
-            resourceDefinitionsContainDecayProduct = PartResourceLibrary.Instance.resourceDefinitions.Contains(decayProduct);
-            if (resourceDefinitionsContainDecayProduct)
+            double timeDiffInSeconds = lastActiveTime - Planetarium.GetUniversalTime();
+
+            if (!(timeDiffInSeconds > 0)) return;
+
+            double resourceAmount = decayResource.amount;
+            decayResource.amount = resourceAmount * Math.Exp(-decayConstant * timeDiffInSeconds);
+
+            if (_decayProductDefinition == null)
+                return;
+
+            double nChange = resourceAmount - decayResource.amount;
+
+            if (nChange <= 0)
+                return;
+
+            var decayProductAmount = nChange * _densityRat;
+
+            var decayProductResource = part.Resources[decayProduct];
+
+            if (canConvertVolume && decayProductResource != null)
             {
-                var decay_density = PartResourceLibrary.Instance.GetDefinition(decayProduct).density;
-                if (decay_density > 0 && decay_resource.info.density > 0)
-                    density_rat = decay_resource.info.density / PartResourceLibrary.Instance.GetDefinition(decayProduct).density;
+                decayProductResource.amount += decayProductAmount;
+
+                var productOverflow = Math.Max(0, decayProductResource.amount - decayProductResource.maxAmount);
+                if (productOverflow > 0)
+                    decayProductResource.maxAmount = decayProductResource.amount;
+
+                decayResource.maxAmount -= productOverflow / _densityRat;
+                decayResource.amount = Math.Min(decayResource.amount, decayResource.maxAmount);
+
+                return;
             }
 
-            if (!CheatOptions.UnbreakableJoints && decay_resource != null && time_diff > 0)
-            {
-                double n_0 = decay_resource.amount;
-                decay_resource.amount = n_0 * Math.Exp(-decayConstant * time_diff);
-                double n_change = n_0 - decay_resource.amount;
-
-                if (resourceDefinitionsContainDecayProduct && n_change > 0)
-                    part.RequestResource(decayProduct, -n_change * density_rat);
-            }
+            part.RequestResource(decayProduct, -decayProductAmount);
         }
 
         public void FixedUpdate()
         {
-            if (!HighLogic.LoadedSceneIsFlight) return;
+            if (HighLogic.LoadedSceneIsEditor) return;
 
-            var decay_resource = part.Resources[resourceName];
-            if (decay_resource == null) return;
+            var decayResource = part.Resources[resourceName];
+            if (decayResource == null) return;
 
-            lastActiveTime = Planetarium.GetUniversalTime();
+            var currentActiveTime = Planetarium.GetUniversalTime();
+
+            lastActiveTime = currentActiveTime;
 
             if (CheatOptions.UnbreakableJoints)
                 return;
 
-            double decay_amount = decayConstant * decay_resource.amount * TimeWarp.fixedDeltaTime;
-            decay_resource.amount -= decay_amount;
+            double decayAmount = decayConstant * decayResource.amount * TimeWarp.fixedDeltaTime;
+            decayResource.amount -= decayAmount;
 
-            if (resourceDefinitionsContainDecayProduct && decay_amount > 0)
-                part.RequestResource(decayProduct, -decay_amount * density_rat);
+            if (_decayProductDefinition == null || !(decayAmount > 0)) return;
+
+            var decayProductAmount = decayAmount * _densityRat;
+
+            var decayProductResource = part.Resources[decayProduct];
+
+            if (canConvertVolume && decayProductResource != null)
+            {
+                decayProductResource.amount += decayProductAmount;
+
+                var productOverflow = Math.Max(0, decayProductResource.amount - decayProductResource.maxAmount);
+                if (productOverflow > 0)
+                    decayProductResource.maxAmount = decayProductResource.amount;
+
+                decayResource.maxAmount -= productOverflow / _densityRat;
+                decayResource.amount = Math.Min(decayResource.amount, decayResource.maxAmount);
+
+                return;
+            }
+
+            part.RequestResource(decayProduct, -decayProductAmount, ResourceFlowMode.STACK_PRIORITY_SEARCH);
         }
 
         public override string GetInfo()
         {
-            return "Radioactive Decay";
+            return Localizer.Format("#LOC_IFS_RadioactiveDecay_Getinfo");//"Radioactive Decay"
         }
-
     }
 }

@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections;
+﻿using KSP.Localization;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -8,7 +7,7 @@ namespace FNPlugin.Animate
     public class FNLightSwitch : PartModule
     {
         [KSPField]
-        public string lightName = "Light";
+        public string lightName = Localizer.Format("#LOC_KSPIE_LightSwitch_lightName");//"Light"
 
         [KSPField]
         public string Emissive = "Emissive";

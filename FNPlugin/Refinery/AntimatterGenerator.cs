@@ -1,16 +1,16 @@
 ﻿using FNPlugin.Constants;
 
-namespace FNPlugin.Refinery 
+namespace FNPlugin.Refinery
 {
-    class AntimatterGenerator : RefineryActivityBase
+    class AntimatterGenerator : RefineryActivity
     {
-        public double ProductionRate { get { return _current_rate; } }
+        public double ProductionRate => _current_rate;
 
-        double _efficiency = 0.01149;
+        private readonly double _efficiency = 0.01149;   // base efficiency
 
-        public double Efficiency { get { return _efficiency;}}
+        public double Efficiency => _efficiency;
 
-        PartResourceDefinition _antimatterDefinition;
+        readonly PartResourceDefinition _antimatterDefinition;
 
         public AntimatterGenerator(Part part, double efficiencyMultiplier, PartResourceDefinition antimatterDefinition)
         {
@@ -19,31 +19,60 @@ namespace FNPlugin.Refinery
             _vessel = part.vessel;
             _antimatterDefinition = antimatterDefinition;
 
-            if (HighLogic.CurrentGame != null && HighLogic.CurrentGame.Mode == Game.Modes.CAREER)
-            {
-                if (PluginHelper.UpgradeAvailable("ultraHighEnergyPhysics"))
-                    _efficiency /= 100;
-                else if (PluginHelper.UpgradeAvailable("appliedHighEnergyPhysics"))
-                    _efficiency /= 500;
-                else if (PluginHelper.UpgradeAvailable("highEnergyScience"))
-                    _efficiency /= 2000;
-                else
-                    _efficiency /= 10000;
-            }
-            else
-            {
+            int techLevel = 0;
+            if (PluginHelper.UpgradeAvailable("ScienceLabUpgradeA"))
+                techLevel++;
+            if (PluginHelper.UpgradeAvailable("ScienceLabUpgradeB"))
+                techLevel++;
+            if (PluginHelper.UpgradeAvailable("ScienceLabUpgradeC"))
+                techLevel++;
+            if (PluginHelper.UpgradeAvailable("ScienceLabUpgradeD"))
+                techLevel++;
+            if (PluginHelper.UpgradeAvailable("ScienceLabUpgradeE"))
+                techLevel++;
+
+            if (techLevel >= 5)
+                _efficiency /= 20;
+            if (techLevel == 4)
                 _efficiency /= 100;
-            }
+            else if (techLevel == 3)
+                _efficiency /= 500;
+            else if (techLevel == 2)
+                _efficiency /= 2000;
+            else if (techLevel == 1)
+                _efficiency /= 10000;
+            else
+                _efficiency /= 50000;
         }
 
-        public void Produce(double energy_provided_in_megajoules) 
+        public void Produce(double energyProvidedInMegajoules)
         {
-            if (energy_provided_in_megajoules <= 0)
+            if (energyProvidedInMegajoules <= 0)
                 return;
 
-            double antimatter_units = energy_provided_in_megajoules * 1E6 / GameConstants.lightSpeedSquared / 2000 / _antimatterDefinition.density * _efficiency;
+            double antimatterUnits = energyProvidedInMegajoules * 1E6 / GameConstants.lightSpeedSquared / 2000 / _antimatterDefinition.density * _efficiency;
 
-            _current_rate = -_part.RequestResource(_antimatterDefinition.id, -antimatter_units, ResourceFlowMode.STAGE_PRIORITY_FLOW);
-        }        
+            _current_rate = -_part.RequestResource(_antimatterDefinition.id, -antimatterUnits, ResourceFlowMode.STAGE_PRIORITY_FLOW);
+        }
+
+        public override void UpdateFrame(double rateMultiplier, double powerFraction, double productionModifier, bool allowOverflow, double fixedDeltaTime, bool isStartup = false)
+        {
+            // do nothing
+        }
+
+        public override bool HasActivityRequirements()
+        {
+            return true;
+        }
+
+        public override void PrintMissingResources()
+        {
+            // do nothing
+        }
+
+        public override void Initialize(Part localPart, InterstellarRefineryController controller)
+        {
+            // do nothing
+        }
     }
 }

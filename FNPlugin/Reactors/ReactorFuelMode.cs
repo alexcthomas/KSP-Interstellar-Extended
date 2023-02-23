@@ -1,15 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using KSP.Localization;
 
 namespace FNPlugin.Reactors
 {
     class ReactorProduction
     {
-        public ReactorProduct fuelmode;
+        public ReactorProduct fuelMode;
         public double mass;
     }
-     
+
     class FuelResourceMetaData
     {
         public FuelResourceMetaData(PartResourceDefinition resourceDefinition, double ratio)
@@ -19,7 +20,7 @@ namespace FNPlugin.Reactors
         }
 
         public PartResourceDefinition resourceDefinition;
-        public double ratio = 1;
+        public double ratio;
     }
 
     class ResourceGroupMetaData
@@ -52,50 +53,64 @@ namespace FNPlugin.Reactors
             AlternativeFuelType3 = first.AlternativeFuelType3;
             AlternativeFuelType4 = first.AlternativeFuelType4;
             AlternativeFuelType5 = first.AlternativeFuelType5;
+            AlternativeFuelType6 = first.AlternativeFuelType6;
 
             Index = first.Index;
-            ModeGUIName = first.ModeGUIName;
+            ModeGUIName = first.ModeGuiName;
+            DisplayName = first.DisplayName;
             TechLevel = first.TechLevel;
+            MinimumFusionGainFactor = first.MinimumQ;
             TechRequirement = first.TechRequirement;
             SupportedReactorTypes = first.SupportedReactorTypes;
             Aneutronic = first.Aneutronic;
+            Hidden = first.Hidden;
             GammaRayEnergy = first.GammaRayEnergy;
             RequiresLab = first.RequiresLab;
             RequiresUpgrade = first.RequiresUpgrade;
             ChargedPowerRatio = first.ChargedPowerRatio;
             MeVPerChargedProduct = first.MeVPerChargedProduct;
-            NormalisedReactionRate = first.NormalisedReactionRate;
-            NormalisedPowerRequirements = first.NormalisedPowerRequirements;
+            ReactionRatePowerMultiplier = first.ReactionRatePowerMultiplier;
+            NormalizedPowerMultiplier = first.NormalizedPowerMultiplier;
+            NormalizedPowerRequirements = first.NormalizedPowerRequirements;
             NeutronsRatio = first.NeutronsRatio;
             TritiumBreedModifier = first.TritiumBreedModifier;
-            FuelEfficencyMultiplier = first.FuelEfficencyMultiplier;
+            FuelEfficiencyMultiplier = first.FuelEfficiencyMultiplier;
         }
 
-        public int SupportedReactorTypes { get; private set; }
-        public int Index { get; private set; }
-        public string ModeGUIName { get; private set; }
-        public string TechRequirement { get; private set; }
-        public bool Aneutronic { get; private set; }
-        public double GammaRayEnergy { get; private set; }        
-        public bool RequiresLab { get; private set; }
-        public bool RequiresUpgrade { get; private set; }
-        public float ChargedPowerRatio { get; private set; }
-        public double MeVPerChargedProduct { get; private set; }
-        public float NormalisedReactionRate { get; private set; }
-        public float NormalisedPowerRequirements { get; private set; }
-        public int TechLevel { get; private set; }
-        public float NeutronsRatio { get; private set; }
-        public float TritiumBreedModifier { get; private set; }
-        public double FuelEfficencyMultiplier { get; private set; }
+        public bool Aneutronic { get;}
+        public bool Hidden { get; }
+        public bool RequiresLab { get;  }
+        public bool RequiresUpgrade { get; }
 
-        public string AlternativeFuelType1 { get; private set; }
-        public string AlternativeFuelType2 { get; private set; }
-        public string AlternativeFuelType3 { get; private set; }
-        public string AlternativeFuelType4 { get; private set; }
-        public string AlternativeFuelType5 { get; private set; }
+        public int TechLevel { get; }
+        public int MinimumFusionGainFactor { get; }
+        public int SupportedReactorTypes { get; }
+        public int Index { get; }
 
-        public List<ReactorFuelMode> Variants { get; private set; }
-        public List<ResourceGroupMetaData> ResourceGroups { get; private set; }
+        public float NeutronsRatio { get;}
+        public float TritiumBreedModifier { get;}
+        public float ReactionRatePowerMultiplier { get; }
+        public float NormalizedPowerMultiplier { get; }
+        public float NormalizedPowerRequirements { get; }
+        public float ChargedPowerRatio { get; }
+
+        public double MeVPerChargedProduct { get; }
+        public double FuelEfficiencyMultiplier { get; }
+        public double GammaRayEnergy { get; }
+
+        public string AlternativeFuelType1 { get;}
+        public string AlternativeFuelType2 { get;}
+        public string AlternativeFuelType3 { get;}
+        public string AlternativeFuelType4 { get;}
+        public string AlternativeFuelType5 { get; }
+        public string AlternativeFuelType6 { get; }
+
+        public string ModeGUIName { get; }
+        public string DisplayName { get; }
+        public string TechRequirement { get; }
+
+        public List<ReactorFuelMode> Variants { get;}
+        public List<ResourceGroupMetaData> ResourceGroups { get; }
 
         // Methods
         public List<ReactorFuelMode> GetVariantsOrderedByFuelRatio(Part part, double fuelEfficiency, double powerToSupply, double fuelUsePerMjMult, bool allowSimulate = true)
@@ -111,137 +126,103 @@ namespace FNPlugin.Reactors
 
     class ReactorFuelMode
     {
-        protected int _reactor_type;
-        protected int _index;
-        protected string _name;
-        protected string _mode_gui_name;
-        protected string _techRequirement;
-        protected List<ReactorFuel> _fuels;
-        protected List<ReactorProduct> _products;
-        protected float _reactionRate;
-        protected float _powerMultiplier;
-        protected float _normpowerrequirements;
-        protected float _charged_power_ratio;
-        protected double _mev_per_charged_product;
-        protected float _neutrons_ratio;
-        protected float _tritium_breed_multiplier;
-        protected double _fuel_efficency_multiplier;
-        protected bool _requires_lab;
-        protected bool _requires_upgrade;
-        protected int _techLevel;
-        protected bool _aneutronic;
-        protected double _gammaRayEnergy;
-        protected double _fuelUseInGramPerTeraJoule;
-        protected double _gigawattPerGram;
-
-        protected string _alternativeFuelType1;
-        protected string _alternativeFuelType2;
-        protected string _alternativeFuelType3;
-        protected string _alternativeFuelType4;
-        protected string _alternativeFuelType5;
+        protected float reactionRate;
+        protected float normalizedPowerMultiplier;
 
         public ReactorFuelMode(ConfigNode node)
         {
-            _name = node.GetValue("name");
-            _mode_gui_name = node.GetValue("GUIName");
-            _reactor_type = Convert.ToInt32(node.GetValue("ReactorType"));
-            _index = node.HasValue("Index") ? int.Parse(node.GetValue("Index")) : 0;
+            Name = node.GetValue("name");
+            ModeGuiName = node.GetValue("GUIName");
+            DisplayName = node.HasValue("DisplayName") ? Localizer.Format(node.GetValue("DisplayName")) : ModeGuiName;
+            SupportedReactorTypes = Convert.ToInt32(node.GetValue("ReactorType"));
+            Index = node.HasValue("Index") ? int.Parse(node.GetValue("Index")) : 0;
+            Hidden = node.HasValue("Hidden") && bool.Parse(node.GetValue("Hidden"));
 
-            _techRequirement = node.HasValue("TechRequirement") ? node.GetValue("TechRequirement") : String.Empty;
+            TechRequirement = node.HasValue("TechRequirement") ? node.GetValue("TechRequirement") : string.Empty;
 
-            _alternativeFuelType1 = node.HasValue("AlternativeFuelType1") ? node.GetValue("AlternativeFuelType1") : String.Empty;
-            _alternativeFuelType2 = node.HasValue("AlternativeFuelType2") ? node.GetValue("AlternativeFuelType2") : String.Empty;
-            _alternativeFuelType3 = node.HasValue("AlternativeFuelType3") ? node.GetValue("AlternativeFuelType3") : String.Empty;
-            _alternativeFuelType4 = node.HasValue("AlternativeFuelType4") ? node.GetValue("AlternativeFuelType4") : String.Empty;
-            _alternativeFuelType5 = node.HasValue("AlternativeFuelType5") ? node.GetValue("AlternativeFuelType5") : String.Empty;
+            AlternativeFuelType1 = node.HasValue("AlternativeFuelType1") ? node.GetValue("AlternativeFuelType1") : string.Empty;
+            AlternativeFuelType2 = node.HasValue("AlternativeFuelType2") ? node.GetValue("AlternativeFuelType2") : string.Empty;
+            AlternativeFuelType3 = node.HasValue("AlternativeFuelType3") ? node.GetValue("AlternativeFuelType3") : string.Empty;
+            AlternativeFuelType4 = node.HasValue("AlternativeFuelType4") ? node.GetValue("AlternativeFuelType4") : string.Empty;
+            AlternativeFuelType5 = node.HasValue("AlternativeFuelType5") ? node.GetValue("AlternativeFuelType5") : string.Empty;
+            AlternativeFuelType6 = node.HasValue("AlternativeFuelType6") ? node.GetValue("AlternativeFuelType6") : string.Empty;
 
-            _reactionRate = node.HasValue("NormalisedReactionRate") ? Single.Parse(node.GetValue("NormalisedReactionRate")) : 1;
-            _powerMultiplier = node.HasValue("NormalisedPowerMultiplier") ? Single.Parse(node.GetValue("NormalisedPowerMultiplier")) : 1;
-            _normpowerrequirements = node.HasValue("NormalisedPowerConsumption") ? Single.Parse(node.GetValue("NormalisedPowerConsumption")) : 1;
-            _charged_power_ratio = node.HasValue("ChargedParticleRatio") ? Single.Parse(node.GetValue("ChargedParticleRatio")) : 0;
+            reactionRate = node.HasValue("NormalisedReactionRate") ? float.Parse(node.GetValue("NormalisedReactionRate")) : 1;
+            normalizedPowerMultiplier = node.HasValue("NormalisedPowerMultiplier") ? float.Parse(node.GetValue("NormalisedPowerMultiplier")) : 1;
+            NormalizedPowerRequirements = node.HasValue("NormalisedPowerConsumption") ? float.Parse(node.GetValue("NormalisedPowerConsumption")) : 1;
+            ChargedPowerRatio = node.HasValue("ChargedParticleRatio") ? float.Parse(node.GetValue("ChargedParticleRatio")) : 0;
 
-            _mev_per_charged_product = node.HasValue("MeVPerChargedProduct") ? Double.Parse(node.GetValue("MeVPerChargedProduct")) : 0;
-            _neutrons_ratio = node.HasValue("NeutronsRatio") ? Single.Parse(node.GetValue("NeutronsRatio")) : 1;
-            _tritium_breed_multiplier = node.HasValue("TritiumBreedMultiplier") ? Single.Parse(node.GetValue("TritiumBreedMultiplier")) : 1; 
-            _fuel_efficency_multiplier = node.HasValue("FuelEfficiencyMultiplier") ? Double.Parse(node.GetValue("FuelEfficiencyMultiplier")) : 1;
+            MeVPerChargedProduct = node.HasValue("MeVPerChargedProduct") ? double.Parse(node.GetValue("MeVPerChargedProduct")) : 0;
+            NeutronsRatio = node.HasValue("NeutronsRatio") ? float.Parse(node.GetValue("NeutronsRatio")) : 1;
+            TritiumBreedModifier = node.HasValue("TritiumBreedMultiplier") ? float.Parse(node.GetValue("TritiumBreedMultiplier")) : 1;
+            FuelEfficiencyMultiplier = node.HasValue("FuelEfficiencyMultiplier") ? double.Parse(node.GetValue("FuelEfficiencyMultiplier")) : 1;
 
-            _requires_lab = node.HasValue("RequiresLab") ? Boolean.Parse(node.GetValue("RequiresLab")) : false;
-            _requires_upgrade = node.HasValue("RequiresUpgrade") ? Boolean.Parse(node.GetValue("RequiresUpgrade")) : false;
-            _techLevel = node.HasValue("TechLevel") ? Int32.Parse(node.GetValue("TechLevel")) : 0;
-            _aneutronic = node.HasValue("Aneutronic") ? Boolean.Parse(node.GetValue("Aneutronic")) : false;
-            _gammaRayEnergy = node.HasValue("GammaRayEnergy") ? Double.Parse(node.GetValue("GammaRayEnergy")) : 0;
+            RequiresLab = node.HasValue("RequiresLab") && bool.Parse(node.GetValue("RequiresLab"));
+            RequiresUpgrade = node.HasValue("RequiresUpgrade") && bool.Parse(node.GetValue("RequiresUpgrade"));
+            TechLevel = node.HasValue("TechLevel") ? int.Parse(node.GetValue("TechLevel")) : 0;
+            MinimumQ = node.HasValue("MinimumQ") ? int.Parse(node.GetValue("MinimumQ")) : 0;
+            Aneutronic = node.HasValue("Aneutronic") && bool.Parse(node.GetValue("Aneutronic"));
+            GammaRayEnergy = node.HasValue("GammaRayEnergy") ? double.Parse(node.GetValue("GammaRayEnergy")) : 0;
 
 
-            ConfigNode[] fuel_nodes = node.GetNodes("FUEL");
-            _fuels = fuel_nodes.Select(nd => new ReactorFuel(nd)).ToList();
+            ConfigNode[] fuelNodes = node.GetNodes("FUEL");
+            ReactorFuels = fuelNodes.Select(nd => new ReactorFuel(nd)).ToList();
 
-            ConfigNode[] products_nodes = node.GetNodes("PRODUCT");
-            _products = products_nodes.Select(nd => new ReactorProduct(nd)).ToList();
+            ConfigNode[] productsNodes = node.GetNodes("PRODUCT");
+            ReactorProducts = productsNodes.Select(nd => new ReactorProduct(nd)).ToList();
 
-            AllFuelResourcesDefinitionsAvailable = _fuels.All(m => m.Definition != null);
-            AllProductResourcesDefinitionsAvailable = _products.All(m => m.Definition != null);
+            AllFuelResourcesDefinitionsAvailable = ReactorFuels.All(m => m.Definition != null);
+            AllProductResourcesDefinitionsAvailable = ReactorProducts.All(m => m.Definition != null);
 
-            var totalTonsFuelUsePerMJ = _fuels.Sum(m => m.TonsFuelUsePerMJ);
+            var totalTonsFuelUsePerMj = ReactorFuels.Sum(m => m.TonsFuelUsePerMj);
 
-            _fuelUseInGramPerTeraJoule = totalTonsFuelUsePerMJ * 1e12;
+            FuelUseInGramPerTeraJoule = totalTonsFuelUsePerMj * 1e12;
 
-            _gigawattPerGram = 1 / (totalTonsFuelUsePerMJ * 1e9);
+            GigawattPerGram = 1 / (totalTonsFuelUsePerMj * 1e9);
         }
 
-        public string AlternativeFuelType1 { get { return _alternativeFuelType1; } }
-        public string AlternativeFuelType2 { get { return _alternativeFuelType2; } }
-        public string AlternativeFuelType3 { get { return _alternativeFuelType3; } }
-        public string AlternativeFuelType4 { get { return _alternativeFuelType4; } }
-        public string AlternativeFuelType5 { get { return _alternativeFuelType5; } }
+        public float NormalizedPowerMultiplier => normalizedPowerMultiplier;
+        public float ReactionRatePowerMultiplier => reactionRate * normalizedPowerMultiplier;
 
-        public int SupportedReactorTypes { get { return _reactor_type; } }
+        public IList<ReactorFuel> ReactorFuels { get; }
+        public IList<ReactorProduct> ReactorProducts { get; }
 
-        public int Index { get { return _index; } }
+        public string AlternativeFuelType1 { get; }
+        public string AlternativeFuelType2 { get; }
+        public string AlternativeFuelType3 { get; }
+        public string AlternativeFuelType4 { get; }
+        public string AlternativeFuelType5 { get; }
+        public string AlternativeFuelType6 { get; }
 
-        public string Name { get { return _name; } }
+        public string Name { get; }
+        public string ModeGuiName { get; }
+        public string DisplayName { get; }
+        public string TechRequirement { get; }
 
-        public string ModeGUIName { get { return _mode_gui_name; } }
-
-        public string TechRequirement { get { return _techRequirement; } }
-
-        public IList<ReactorFuel> ReactorFuels { get { return _fuels; } }
-
-        public IList<ReactorProduct> ReactorProducts { get { return _products; } }
-
-        public bool Aneutronic { get { return _aneutronic; } }
-
-        public double GammaRayEnergy { get { return _gammaRayEnergy; } }
-
-        public bool RequiresLab { get { return _requires_lab; } }
-
-        public bool RequiresUpgrade { get { return _requires_upgrade; } }
-
-        public float ChargedPowerRatio { get { return _charged_power_ratio; } }
-
-        public double MeVPerChargedProduct { get { return _mev_per_charged_product; } }
-
-        public float NormalisedReactionRate { get { return _reactionRate * _powerMultiplier; } }
-
-        public float NormalisedPowerRequirements { get { return _normpowerrequirements; } }
-
-        public int TechLevel { get { return _techLevel; } }
-
-        public float NeutronsRatio { get { return _neutrons_ratio; } }
-
-        public float TritiumBreedModifier { get { return _tritium_breed_multiplier; } }    // calcula
-
-        public double FuelEfficencyMultiplier { get { return _fuel_efficency_multiplier; } }
-
-        public double FuelUseInGramPerTeraJoule { get { return _fuelUseInGramPerTeraJoule; } }
-
-        public double GigawattPerGram { get { return _gigawattPerGram; } }
-
+        public int SupportedReactorTypes { get; }
+        public int Index { get; }
         public int Position { get; set; }
+        public int TechLevel { get; }
+        public int MinimumQ { get; }
 
+        public bool Hidden { get; }
+        public bool RequiresLab { get; }
+        public bool RequiresUpgrade { get; }
+        public bool Aneutronic { get; }
+        public bool AllFuelResourcesDefinitionsAvailable { get; }
+        public bool AllProductResourcesDefinitionsAvailable { get; }
+
+        public double FuelEfficiencyMultiplier { get; }
+        public double FuelUseInGramPerTeraJoule { get; }
+        public double GigawattPerGram { get; }
+        public double GammaRayEnergy { get; }
+        public double MeVPerChargedProduct { get; }
         public double FuelRatio { get; set; }
 
-        public bool AllFuelResourcesDefinitionsAvailable { get; private set; }
-        public bool AllProductResourcesDefinitionsAvailable { get; private set; }
+        public float NormalizedPowerRequirements { get; }
+        public float NeutronsRatio { get; }
+        public float TritiumBreedModifier { get; }
+        public float ChargedPowerRatio { get; }
 
     }
 }

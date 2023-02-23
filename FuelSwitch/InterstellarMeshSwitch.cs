@@ -1,8 +1,7 @@
-﻿using KSP.Localization;
-using System;
+﻿using System;
+using KSP.Localization;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using UnityEngine;
 
 namespace InterstellarFuelSwitch
@@ -12,7 +11,7 @@ namespace InterstellarFuelSwitch
         void SwitchToFuelTankSetup(string fuelTankSetup);
     }
 
-    class meshConfiguration
+    class MeshConfiguration
     {
         public List<Transform> objectTransforms;
         public string fuelTankSetup;
@@ -24,120 +23,99 @@ namespace InterstellarFuelSwitch
     [KSPModule("#LOC_IFS_MeshSwitch_moduleName")]
     public class InterstellarMeshSwitch : PartModule, IHaveFuelTankSetup
     {
-        [KSPField]
-        public string moduleID = "0";
-        [KSPField]
-        public string switcherDescription = "#LOC_IFS_MeshSwitch_MeshName";
-        [KSPField]
-        public string tankSwitchNames = string.Empty;
-        [KSPField]
-        public string indexNames = string.Empty;
-        [KSPField]
-        public string objectDisplayNames = string.Empty;
-        [KSPField]
-        public bool showPreviousButton = true;
-        [KSPField]
-        public bool useFuelSwitchModule = false;
-        [KSPField]
-        public string searchTankId = "";
-        [KSPField]
-        public string fuelTankSetups = "0";
-        [KSPField]
-        public string objects = string.Empty;
-        [KSPField]
-        public bool updateSymmetry = true;
-        [KSPField]
-        public bool affectColliders = true;
-        [KSPField]
-        public bool showInfo = true;
-        [KSPField]
-        public bool debugMode = false;
-        [KSPField]
-        public bool showSwitchButtons = false;
-        [KSPField]
-        public bool orderByIndexNames = false;
-        [KSPField]
-        public bool showCurrentObjectName = false;
-        [KSPField]
-        public bool hasSwitchChooseOption = true;
-        [KSPField]
-        public bool initialized;
+        [KSPField] public string moduleID = "0";
+        [KSPField] public string switcherDescription = "#LOC_IFS_MeshSwitch_MeshName";
+        [KSPField] public string tankSwitchNames = string.Empty;
+        [KSPField] public string indexNames = string.Empty;
+        [KSPField] public string objectDisplayNames = string.Empty;
+        [KSPField] public bool showPreviousButton = true;
+        [KSPField] public bool useFuelSwitchModule;
+        [KSPField] public string searchTankId = "";
+        [KSPField] public string fuelTankSetups = "0";
+        [KSPField] public string objects = string.Empty;
+        [KSPField] public bool updateSymmetry = true;
+        [KSPField] public bool affectColliders = true;
+        [KSPField] public bool showInfo = true;
+        [KSPField] public bool debugMode = false;
+        [KSPField] public bool showSwitchButtons = false;
+        [KSPField] public bool orderByIndexNames = false;
+        [KSPField] public bool showCurrentObjectName = false;
+        [KSPField] public bool hasSwitchChooseOption = true;
+        [KSPField] public bool initialized;
+
         [KSPField(guiActiveEditor = false, guiName = "#LOC_IFS_MeshSwitch_currentObjectName")]
         public string currentObjectName = string.Empty;
 
         [KSPField(isPersistant = true, guiActiveEditor = true)]
         [UI_ChooseOption(affectSymCounterparts = UI_Scene.None, scene = UI_Scene.Editor, suppressEditorShipModified = true)]
         public int selectedObject;
-        
+
         private List<List<Transform>> objectTransforms = new List<List<Transform>>();
-        private List<meshConfiguration> meshConfigurationList = new List<meshConfiguration>();
+        private readonly List<MeshConfiguration> meshConfigurationList = new List<MeshConfiguration>();
         private InterstellarFuelSwitch fuelSwitch;
 
         [KSPEvent(guiActive = false, guiActiveEditor = true, guiActiveUnfocused = false, guiName = "#LOC_IFS_MeshSwitch_nextSetup")]
-        public void nextObjectEvent()
+        public void NextObjectEvent()
         {
             selectedObject++;
             if (selectedObject >= meshConfigurationList.Count)
                 selectedObject = 0;
 
-            SwitchToObject(selectedObject, true);            
+            SwitchToObject(selectedObject, true);
         }
 
         [KSPEvent(guiActive = false, guiActiveEditor = true, guiActiveUnfocused = false, guiName = "#LOC_IFS_MeshSwitch_previousetup")]
-        public void previousObjectEvent()
+        public void PreviousObjectEvent()
         {
             selectedObject--;
             if (selectedObject < 0)
                 selectedObject = meshConfigurationList.Count - 1;
 
-            SwitchToObject(selectedObject, true);        
+            SwitchToObject(selectedObject, true);
         }
 
         private List<List<Transform>> ParseObjectNames()
         {
-            var objectTransforms = new List<List<Transform>>();
+            var transforms = new List<List<Transform>>();
 
             var objectBatchNames = objects.Split(';');
-            if (objectBatchNames.Length > 0)
+
+            if (objectBatchNames.Length <= 0) return transforms;
+
+            foreach (var batchName in objectBatchNames)
             {
-                for (var batchCount = 0; batchCount < objectBatchNames.Length; batchCount++)
+                var newObjects = new List<Transform>();
+                var objectNames = batchName.Split(',');
+                foreach (var objectName in objectNames)
                 {
-                    var newObjects = new List<Transform>();
-                    var objectNames = objectBatchNames[batchCount].Split(',');
-                    for (var objectCount = 0; objectCount < objectNames.Length; objectCount++)
-                    {
-                        var newTransform = part.FindModelTransform(objectNames[objectCount].Trim(' '));
-                        if (newTransform != null)
-                            newObjects.Add(newTransform);
-                        else
-                            newObjects.Add(null);
-                    }
-                    objectTransforms.Add(newObjects);
+                    var newTransform = part.FindModelTransform(objectName.Trim(' '));
+                    newObjects.Add(newTransform != null ? newTransform : null);
                 }
+                transforms.Add(newObjects);
             }
 
-            return objectTransforms; 
+            return transforms;
         }
 
         private void SwitchToObject(int objectNumber, bool calledByPlayer)
         {
-            //Debug.Log("[IFS] - InterstellarMeshSwitch " + part.GetInstanceID() + " calls SetObject with " + objectNumber);
             SetObject(objectNumber, calledByPlayer);
 
             if (HighLogic.LoadedSceneIsFlight || !updateSymmetry)
                 return;
 
-            for (var i = 0; i < part.symmetryCounterparts.Count; i++)
+            foreach (var counterPart in part.symmetryCounterparts)
             {
-                var symSwitch = part.symmetryCounterparts[i].GetComponents<InterstellarMeshSwitch>();
-                for (var j = 0; j < symSwitch.Length; j++)
+                var symSwitch = counterPart.GetComponents<InterstellarMeshSwitch>();
+                foreach (var meshSwitch in symSwitch)
                 {
-                    if (symSwitch[j].moduleID != moduleID) continue;
-
-                    //Debug.Log("[IFS] - InterstellarMeshSwitch " + part.GetInstanceID() + " sets selectedObject to " + selectedObject + " on symerty item " + j);
-                    symSwitch[j].selectedObject = selectedObject;
-                    //Debug.Log("[IFS] - InterstellarMeshSwitch " + part.GetInstanceID() + " calls SetObject with " + objectNumber + " on symerty item " + j);
-                    symSwitch[j].SetObject(objectNumber, calledByPlayer);
+                    var ims = meshSwitch;
+                    int prevObject = ims.selectedObject;
+                    if (ims.moduleID == moduleID && prevObject != selectedObject)
+                    {
+                        ims.selectedObject = selectedObject;
+                        meshSwitch.SetObject(objectNumber, calledByPlayer);
+                    }
                 }
             }
         }
@@ -147,20 +125,17 @@ namespace InterstellarFuelSwitch
             InitializeData();
 
             // first disable all transforms
-            for (var i = 0; i < objectTransforms.Count; i++)
+            foreach (var currentTransforms in objectTransforms)
             {
-                var currentTransforms = objectTransforms[i];
-
-                for (var j = 0; j < currentTransforms.Count; j++)
+                foreach (var curTransform in currentTransforms)
                 {
-                    Transform transform = currentTransforms[j];
-                    if (transform == null) continue;
+                    if (curTransform == null) continue;
 
-                    transform.gameObject.SetActive(false);
+                    curTransform.gameObject.SetActive(false);
 
                     if (!affectColliders) continue;
 
-                    var collider = transform.gameObject.GetComponent<Collider>();
+                    var collider = curTransform.gameObject.GetComponent<Collider>();
                     if (collider != null)
                         collider.enabled = false;
                 }
@@ -171,27 +146,24 @@ namespace InterstellarFuelSwitch
             {
                 var currentTransforms = meshConfigurationList[objectNumber].objectTransforms;
 
-                for (var i = 0; i < currentTransforms.Count; i++)
+                foreach (var curTransform in currentTransforms)
                 {
-                    Transform transform = currentTransforms[i];
-                    if (transform == null) continue;
+                    if (curTransform == null) continue;
 
-                    transform.gameObject.SetActive(true);
+                    curTransform.gameObject.SetActive(true);
 
                     if (!affectColliders) continue;
 
-                    var colloder = transform.gameObject.GetComponent<Collider>();
+                    var collider = curTransform.gameObject.GetComponent<Collider>();
 
-                    if (colloder == null) continue;
+                    if (collider == null) continue;
 
-                    colloder.enabled = true;
+                    collider.enabled = true;
                 }
             }
 
             if (useFuelSwitchModule && fuelSwitch != null && objectNumber >= 0 && objectNumber < meshConfigurationList.Count)
             {
-                //var newTankMame = meshConfigurationList[objectNumber].fuelTankSetup;
-                //Debug.Log("[IFS] - InterstellarMeshSwitch " + part.GetInstanceID() + " calls fuelSwitch.SelectTankSetup with " + newTankMame + " derived from  objectNumber " + objectNumber);
                 fuelSwitch.SelectTankSetup(meshConfigurationList[objectNumber].fuelTankSetup, calledByPlayer);
             }
 
@@ -203,36 +175,35 @@ namespace InterstellarFuelSwitch
             currentObjectName = selectedObject >= 0 && selectedObject < meshConfigurationList.Count ? Localizer.Format(meshConfigurationList[selectedObject].objectDisplay) : "";
         }
 
-        public override void OnStart(PartModule.StartState state)
+        public override void OnStart(StartState state)
         {
             InitializeData(true);
 
             SwitchToObject(selectedObject, false);
 
-            Fields["currentObjectName"].guiActiveEditor = showCurrentObjectName;
+            Fields[nameof(currentObjectName)].guiActiveEditor = showCurrentObjectName;
 
-            var nextButton = Events["nextObjectEvent"];
+            var nextButton = Events[nameof(NextObjectEvent)];
             nextButton.guiActiveEditor = showSwitchButtons;
 
-            var prevButton = Events["previousObjectEvent"];
+            var prevButton = Events[nameof(PreviousObjectEvent)];
             prevButton.guiActiveEditor = showSwitchButtons;
 
-            var chooseField = Fields["selectedObject"];
+            var chooseField = Fields[nameof(selectedObject)];
             chooseField.guiName = Localizer.Format(switcherDescription);
             chooseField.guiActiveEditor = hasSwitchChooseOption;
 
-            var chooseOption = chooseField.uiControlEditor as UI_ChooseOption;
-            if (chooseOption != null)
+            if (chooseField.uiControlEditor is UI_ChooseOption chooseOption)
             {
                 chooseOption.options = meshConfigurationList.Select(m => m.tankSwitchName).ToArray();
-                chooseOption.onFieldChanged = UpdateFromGUI;
+                chooseOption.onFieldChanged = UpdateFromGui;
             }
 
-            if (!showPreviousButton) 
-                Events["previousObjectEvent"].guiActiveEditor = false;
+            if (!showPreviousButton)
+                Events[nameof(PreviousObjectEvent)].guiActiveEditor = false;
         }
 
-        private void UpdateFromGUI(BaseField field, object oldFieldValueObj)
+        private void UpdateFromGui(BaseField field, object oldFieldValueObj)
         {
             SwitchToObject(selectedObject, true);
         }
@@ -240,7 +211,7 @@ namespace InterstellarFuelSwitch
         public void SwitchToFuelTankSetup(string fuelTankSetup)
         {
             var configuration = meshConfigurationList.FirstOrDefault(m => m.fuelTankSetup == fuelTankSetup);
-            
+
             if (configuration != null)
                 Debug.Log("[IFS]: SwitchToFuelTankSetup fuelTankSetup matches " + fuelTankSetup);
 
@@ -277,79 +248,88 @@ namespace InterstellarFuelSwitch
 
         public void InitializeData(bool forced = false)
         {
-            try
+            if (initialized && !forced) return;
+
+            // you can't have fuel switching without symmetry, it breaks the editor GUI.
+            if (useFuelSwitchModule)
+                updateSymmetry = true;
+
+            objectTransforms = ParseObjectNames();
+            var fuelTankSetupList = ParseTools.ParseNames(fuelTankSetups);
+            var objectDisplayList = ParseTools.ParseNames(objectDisplayNames);
+            var indexNamesList = ParseTools.ParseNames(indexNames);
+            var tankSwitchNamesList = ParseTools.ParseNames(tankSwitchNames);
+
+            // we need to clear the list because InitializeData might be called multiple times
+            meshConfigurationList.Clear();
+
+            for (var i = 0; i < objectDisplayList.Count; i++)
             {
-                if (initialized && !forced) return;
-
-                // you can't have fuel switching without symmetry, it breaks the editor GUI.
-                if (useFuelSwitchModule)
-                    updateSymmetry = true;
-
-                objectTransforms = ParseObjectNames();
-                var fuelTankSetupList = ParseTools.ParseNames(fuelTankSetups);
-                var objectDisplayList = ParseTools.ParseNames(objectDisplayNames);
-                var indexNamesList = ParseTools.ParseNames(indexNames);
-                var tankSwitchNamesList = ParseTools.ParseNames(tankSwitchNames);
-
-                // we need to clear the list because InitializeData might be called multiple times
-                meshConfigurationList.Clear();
-
-                for (var i = 0; i < objectDisplayList.Count; i++)
+                meshConfigurationList.Add(new MeshConfiguration()
                 {
-                    meshConfigurationList.Add(new meshConfiguration()
-                    {
-                        objectDisplay = objectDisplayList[i],
-                        tankSwitchName = Localizer.Format(i < tankSwitchNamesList.Count ? tankSwitchNamesList[i] : objectDisplayList[i]),
-                        indexName = i < indexNamesList.Count ? indexNamesList[i] : objectDisplayList[i],
-                        fuelTankSetup = i < fuelTankSetupList.Count ? fuelTankSetupList[i] : objectDisplayList[i],
-                        objectTransforms = i < objectTransforms.Count ? objectTransforms[i] : new List<Transform>()
-                    });
-                }
+                    objectDisplay = objectDisplayList[i],
+                    tankSwitchName = Localizer.Format(i < tankSwitchNamesList.Count ? tankSwitchNamesList[i] : objectDisplayList[i]),
+                    indexName = i < indexNamesList.Count ? indexNamesList[i] : objectDisplayList[i],
+                    fuelTankSetup = i < fuelTankSetupList.Count ? fuelTankSetupList[i] : objectDisplayList[i],
+                    objectTransforms = i < objectTransforms.Count ? objectTransforms[i] : new List<Transform>()
+                });
+            }
 
-                if (orderByIndexNames)
-                {
-                    if (debugMode)
-                        Debug.Log("[IFS] - InterstellarMeshSwitch " + part.GetInstanceID() + " order meshConfigurationList on indexName");
-                    meshConfigurationList = meshConfigurationList.OrderBy(m => m.indexName).ToList();
-                }
-
+            if (orderByIndexNames)
+            {
                 if (debugMode)
-                    foreach (var config in meshConfigurationList)
-                    {
-                        Debug.Log("fuelTankSetup:" + config.fuelTankSetup + " indexName:" + config.indexName + " objectDisplay: " + config.objectDisplay + " tankSwitchName:" + config.tankSwitchName);
-                    }
+                    Debug.Log("[IFS] - InterstellarMeshSwitch " + part.GetInstanceID() + " order meshConfigurationList on indexName");
+                meshConfigurationList.Sort((a, b) => string.Compare(a.indexName, b.indexName, StringComparison.Ordinal));
+            }
 
-                if (useFuelSwitchModule)
+            if (debugMode)
+            {
+                foreach (var config in meshConfigurationList)
                 {
-                    var fuelSwitches = part.FindModulesImplementing<InterstellarFuelSwitch>();
+                    Debug.Log("fuelTankSetup:" + config.fuelTankSetup + " indexName:" + config.indexName +
+                              " objectDisplay: " + config.objectDisplay + " tankSwitchName:" + config.tankSwitchName);
+                }
+            }
 
-                    if (fuelSwitches.Any() && !string.IsNullOrEmpty(searchTankId))
-                         fuelSwitch = fuelSwitches.FirstOrDefault(m => m.tankId == searchTankId);
+            if (useFuelSwitchModule)
+            {
+                var fuelSwitches = part.FindModulesImplementing<InterstellarFuelSwitch>();
 
-                    if (fuelSwitch == null)
-                        fuelSwitch = fuelSwitches.FirstOrDefault();
+                if (fuelSwitches.Any() && !string.IsNullOrEmpty(searchTankId))
+                        fuelSwitch = fuelSwitches.FirstOrDefault(m => m.tankId == searchTankId);
 
-                    if (fuelSwitch == null)
-                        useFuelSwitchModule = false;
-                    else 
+                if (fuelSwitch == null)
+                    fuelSwitch = fuelSwitches.FirstOrDefault();
+
+                if (fuelSwitch == null)
+                    useFuelSwitchModule = false;
+                else
+                {
+                    var matchingObject = fuelSwitch.FindMatchingConfig(this);
+
+                    var matchingArray = matchingObject.Split(',');
+
+                    var matchingIndexName = matchingArray[0];
+
+                    var matchingMesh =  meshConfigurationList.FirstOrDefault(m => m.indexName == matchingIndexName);
+
+                    if (matchingMesh != null)
+                        selectedObject = meshConfigurationList.IndexOf(matchingMesh);
+                    else
                     {
-                        var matchingObject = fuelSwitch.FindMatchingConfig(this);
+                        var matchingIndex = int.Parse(matchingObject.Split(',')[1]);
 
-                        if (HighLogic.LoadedSceneIsFlight || matchingObject >= 0)
+                        if (HighLogic.LoadedSceneIsFlight || matchingIndex >= 0)
                         {
                             if (debugMode)
-                                Debug.Log("[IFS] - InterstellarMeshSwitch " + part.GetInstanceID() + " sets selectedObject to matching object " + matchingObject);
-                            selectedObject = matchingObject;
+                                Debug.Log("[IFS] - InterstellarMeshSwitch " + part.GetInstanceID() +
+                                          " sets selectedObject to matching object " + matchingObject);
+                            selectedObject = matchingIndex;
                         }
                     }
                 }
-                initialized = true;
             }
-            catch (Exception e)
-            {
-                Debug.LogError("[IFS] - InterstellarMeshSwitch.InitializeData Error: " + e.Message);
-                throw;
-            }
+            initialized = true;
         }
 
         public override string GetInfo()
@@ -358,17 +338,17 @@ namespace InterstellarFuelSwitch
             {
                 var variantList = ParseTools.ParseNames(objectDisplayNames.Length > 0 ? objectDisplayNames : objects);
 
-                var info = new StringBuilder();
-                info.AppendLine(Localizer.Format("#LOC_IFS_MeshSwitch_GetInfo") + ":");
+                var info = StringBuilderCache.Acquire();
+                info.Append(Localizer.Format("#LOC_IFS_MeshSwitch_GetInfo")).AppendLine(":");
 
                 foreach (var t in variantList)
                 {
                     info.AppendLine(t);
                 }
-                return info.ToString();
+                return info.ToStringAndRelease();
             }
             else
                 return string.Empty;
         }
-    }    
+    }
 }

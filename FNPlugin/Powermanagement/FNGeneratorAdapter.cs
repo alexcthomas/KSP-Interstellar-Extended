@@ -1,33 +1,35 @@
-﻿using FNPlugin.Power;
+﻿using FNPlugin.Constants;
+using FNPlugin.Power;
+using FNPlugin.Resources;
 using System;
+using FNPlugin.Beamedpower;
 using UnityEngine;
 
-namespace FNPlugin
+namespace FNPlugin.Powermanagement
 {
     [KSPModule("Generator Adapter")]
     class FNGeneratorAdapter : ResourceSuppliableModule
     {
-        [KSPField(isPersistant = false, guiActiveEditor = false, guiActive = true, guiName = "Generator current power", guiUnits = " MW", guiFormat = "F6")]
+        [KSPField(groupName = FNGenerator.GROUP, groupDisplayName = FNGenerator.GROUP_TITLE, isPersistant = false, guiActiveEditor = false, guiActive = true, guiName = "#LOC_KSPIE_FNGeneratorAdapter_CurrentPower", guiUnits = "#LOC_KSPIE_Reactor_megawattUnit", guiFormat = "F2")]//Generator current power
         public double megaJouleGeneratorPowerSupply;
         [KSPField]
         public int index = 0;
         [KSPField]
         public bool maintainsBuffer = true;
-
         [KSPField]
         public bool showDisplayStatus = true;
         [KSPField]
         public bool showEfficiency = true;
+        [KSPField]
+        public bool active;
 
-        private ModuleGenerator moduleGenerator;
-
-        private ResourceType outputType = 0;
-        private bool active = false;
-        private ResourceBuffers resourceBuffers;
-        private ModuleResource mockInputResource;
-        private ModuleResource moduleOutputResource;
-        private BaseField efficiencyField;
-        private BaseField displayStatusField;
+        private ModuleGenerator _moduleGenerator;
+        private ResourceType _outputType = 0;
+        private ResourceBuffers _resourceBuffers;
+        private ModuleResource _mockInputResource;
+        private ModuleResource _moduleOutputResource;
+        private BaseField _efficiencyField;
+        private BaseField _displayStatusField;
 
         public override void OnStart(StartState state)
         {
@@ -35,103 +37,95 @@ namespace FNPlugin
             {
                 if (state == StartState.Editor) return;
 
+                var beamedPowerReceiver = part.FindModuleImplementing<BeamedPowerReceiver>();
+                if (beamedPowerReceiver != null)
+                {
+                    Debug.LogWarning("[KSPI]: disabling FNGeneratorAdapter, found BeamedPowerReceiver");
+                    return;
+                }
+
+                var generator = part.FindModuleImplementing<FNGenerator>();
+                if (generator != null)
+                {
+                    Debug.LogWarning("[KSPI]: disabling FNGeneratorAdapter, found FNGenerator");
+                    return;
+                }
+
                 var modules = part.FindModulesImplementing<ModuleGenerator>();
 
-                moduleGenerator = modules.Count > index ? modules[index] : null;
+                _moduleGenerator = modules.Count > index ? modules[index] : null;
 
-                if (moduleGenerator == null) return;
+                if (_moduleGenerator == null)
+                {
+                    Debug.LogWarning("[KSPI]: disabling FNGeneratorAdapter, failed to find ModuleGenerator");
+                    return;
+                }
 
-                String[] resources_to_supply = { ResourceManager.FNRESOURCE_MEGAJOULES };
-                this.resources_to_supply = resources_to_supply;
+                string[] resourcesToSupply = { ResourceSettings.Config.ElectricPowerInMegawatt };
+                this.resourcesToSupply = resourcesToSupply;
                 base.OnStart(state);
 
                 if (maintainsBuffer)
-                    resourceBuffers = new ResourceBuffers();
+                    _resourceBuffers = new ResourceBuffers();
 
-                outputType = ResourceType.other;
-                foreach (ModuleResource moduleResource in moduleGenerator.resHandler.outputResources)
+                _outputType = ResourceType.other;
+                foreach (ModuleResource moduleResource in _moduleGenerator.resHandler.outputResources)
                 {
+                    if (moduleResource.name != ResourceSettings.Config.ElectricPowerInMegawatt && moduleResource.name != ResourceSettings.Config.ElectricPowerInKilowatt)
+                        continue;
+
                     // assuming only one of those two is present
-                    if (moduleResource.name == ResourceManager.FNRESOURCE_MEGAJOULES)
+                    _outputType = moduleResource.name == ResourceSettings.Config.ElectricPowerInMegawatt ? ResourceType.megajoule : ResourceType.electricCharge;
+
+                    if (maintainsBuffer)
+                        _resourceBuffers.AddConfiguration(new ResourceBuffers.MaxAmountConfig(moduleResource.name, 50));
+
+                    _mockInputResource = new ModuleResource
                     {
-                        outputType = ResourceType.megajoule;
+                        name = moduleResource.name,
+                        id = moduleResource.name.GetHashCode()
+                    };
 
-                        if (maintainsBuffer)
-                            resourceBuffers.AddConfiguration(new ResourceBuffers.MaxAmountConfig(ResourceManager.FNRESOURCE_MEGAJOULES, 50));
-
-                        mockInputResource = new ModuleResource();
-                        mockInputResource.name = moduleResource.name;
-                        mockInputResource.id = moduleResource.name.GetHashCode();
-                        moduleGenerator.resHandler.inputResources.Add(mockInputResource);
-                        moduleOutputResource = moduleResource;
-                        break;
-                    }
-                    if (moduleResource.name == ResourceManager.STOCK_RESOURCE_ELECTRICCHARGE)
-                    {
-                        outputType = ResourceType.electricCharge;
-
-                        if (maintainsBuffer)
-                            resourceBuffers.AddConfiguration(new ResourceBuffers.MaxAmountConfig(ResourceManager.STOCK_RESOURCE_ELECTRICCHARGE, 50));
-
-                        mockInputResource = new ModuleResource();
-                        mockInputResource.name = moduleResource.name;
-                        mockInputResource.id = moduleResource.name.GetHashCode();
-                        moduleGenerator.resHandler.inputResources.Add(mockInputResource);
-                        moduleOutputResource = moduleResource;
-                        break;
-                    }
+                    _moduleGenerator.resHandler.inputResources.Add(_mockInputResource);
+                    _moduleOutputResource = moduleResource;
+                    break;
                 }
+
                 if (maintainsBuffer)
-                    resourceBuffers.Init(this.part);
+                    _resourceBuffers.Init(part);
 
-                efficiencyField = moduleGenerator.Fields["efficiency"];
-                displayStatusField = moduleGenerator.Fields["displayStatus"];
+                _efficiencyField = _moduleGenerator.Fields[nameof(ModuleGenerator.efficiency)];
+                _displayStatusField = _moduleGenerator.Fields[nameof(ModuleGenerator.displayStatus)];
 
-                efficiencyField.guiActive = showEfficiency;
-                displayStatusField.guiActive = showDisplayStatus;
+                _efficiencyField.guiActive = showEfficiency;
+                _displayStatusField.guiActive = showDisplayStatus;
             }
             catch (Exception e)
             {
-                Debug.LogError("[KSPI]: Exception in FNGeneratorAdapter.OnStart " + e.Message);
+                Debug.LogError("[KSPI]: Exception in FNGeneratorAdapter.OnStart " + e.ToString());
                 throw;
             }
         }
 
         public override void OnFixedUpdate()
         {
-            try
-            {
-                if (!HighLogic.LoadedSceneIsFlight) return;
+            if (!HighLogic.LoadedSceneIsFlight) return;
 
-                if (moduleGenerator == null) return;
+            if (_moduleGenerator == null) return;
 
-                active = true;
-                base.OnFixedUpdate();
-            }
-            catch (Exception e)
-            {
-                Debug.LogError("[KSPI]: Exception in FNGeneratorAdapter.OnFixedUpdate " + e.Message);
-                throw;
-            }
+            active = true;
+            base.OnFixedUpdate();
         }
 
 
         public void FixedUpdate()
         {
-            try
-            {
-                if (!HighLogic.LoadedSceneIsFlight) return;
+            if (!HighLogic.LoadedSceneIsFlight) return;
 
-                if (moduleGenerator == null) return;
+            if (_moduleGenerator == null) return;
 
-                if (!active)
-                    base.OnFixedUpdate();
-            }
-            catch (Exception e)
-            {
-                Debug.LogError("[KSPI]: Exception in FNGeneratorAdapter.OnFixedUpdate " + e.Message);
-                throw;
-            }
+            if (!active)
+                base.OnFixedUpdate();
         }
 
         public override string getResourceManagerDisplayName()
@@ -147,27 +141,27 @@ namespace FNPlugin
 
         public override void OnFixedUpdateResourceSuppliable(double fixedDeltaTime)
         {
-            try
+            if (_moduleGenerator == null) return;
+
+            if (_outputType == ResourceType.other) return;
+
+            if (Kerbalism.IsLoaded)
             {
-                if (moduleGenerator == null) return;
-
-                if (outputType == ResourceType.other) return;
-
-                double generatorRate = moduleOutputResource.rate;
-                mockInputResource.rate = generatorRate;
-
-                double generatorSupply = outputType == ResourceType.megajoule ? generatorRate : generatorRate / 1000;
-
-                if (maintainsBuffer)
-                    resourceBuffers.UpdateBuffers();
-
-                megaJouleGeneratorPowerSupply = supplyFNResourcePerSecondWithMax(generatorSupply, generatorSupply, ResourceManager.FNRESOURCE_MEGAJOULES);
+                _mockInputResource.rate = 0;
+                _moduleOutputResource.rate = 0;
+                return;
             }
-            catch (Exception e)
-            {
-                Debug.LogError("[KSPI]: Exception in FNGeneratorAdapter.OnFixedUpdateResourceSuppliable " + e.Message);
-                throw;
-            }
+
+            var generatorRate = _moduleOutputResource.rate;
+            _mockInputResource.rate = generatorRate;
+
+            double generatorSupply = _outputType == ResourceType.megajoule ? generatorRate :
+                generatorRate / GameConstants.ecPerMJ;
+
+            if (maintainsBuffer)
+                _resourceBuffers.UpdateBuffers();
+
+            megaJouleGeneratorPowerSupply = SupplyFnResourcePerSecondWithMax(generatorSupply, generatorSupply, ResourceSettings.Config.ElectricPowerInMegawatt);
         }
     }
 }

@@ -1,11 +1,12 @@
 ﻿using System;
-using System.Text;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
-using FNPlugin.Microwave;
-using FNPlugin.Redist;
+using FNPlugin.Constants;
 using FNPlugin.Extensions;
+using KSP.Localization;
+using FNPlugin.Powermanagement;
+using FNPlugin.Resources;
+using UnityEngine;
 
 namespace FNPlugin.Beamedpower
 {
@@ -17,276 +18,203 @@ namespace FNPlugin.Beamedpower
 
     class BeamedPowerTransmitter : ResourceSuppliableModule, IMicrowavePowerTransmitter //, IScalarModule
     {
-        //Persistent 
-        [KSPField(isPersistant = true)]
-        public string partId;
-        [KSPField(isPersistant = true)]
-        public bool IsEnabled;
-        [KSPField(isPersistant = true)]
-        public bool relay;
-        [KSPField(isPersistant = true, guiActive = true, guiName = "Can Relay")]
-        public bool canRelay;
-        [KSPField(isPersistant = true, guiActive = true, guiName = "Merging Beams")]
-        public bool mergingBeams;
-        [KSPField(isPersistant = true)]
-        public double nuclear_power = 0;
-        [KSPField(isPersistant = true)]
-        public double solar_power = 0;
-        [KSPField(isPersistant = true, guiActiveEditor = true, guiActive = true, guiName = "Power Capacity", guiUnits = " MW", guiFormat = "F2")]
-        public double power_capacity = 0;
-        [KSPField(isPersistant = true, guiActiveEditor = true, guiActive = true, guiName = "Transmit WaveLength m", guiFormat = "F8", guiUnits = " m")]
-        public double wavelength = 0;
-        [KSPField(isPersistant = true, guiActiveEditor = true, guiActive = true, guiName = "Transmit WaveLength SI")]
-        public string wavelengthText;
-        [KSPField(isPersistant = true)]
-        public double atmosphericAbsorption = 0.1;
-        [KSPField(isPersistant = true, guiActiveEditor = false, guiActive = false, guiName = "Min Relay WaveLength", guiFormat = "F8", guiUnits = " m")]
-        public double minimumRelayWavelenght;
-        [KSPField(isPersistant = true, guiActiveEditor = false, guiActive = false, guiName = "Max Relay WaveLength", guiFormat = "F8", guiUnits = " m")]
-        public double maximumRelayWavelenght;
-        [KSPField(isPersistant = true, guiActiveEditor = true, guiActive = true, guiName = "Transmit WaveLength WL Name")]
-        public string wavelengthName;
-        [KSPField(isPersistant = true)]
-        public double aperture = 1;
-        [KSPField(isPersistant = true)]
-        public double diameter = 0;
-        [KSPField(isPersistant = true, guiActiveEditor = true, guiActive = false, guiName= "Is Mirror")]
-        public bool isMirror = false;
-        [KSPField(isPersistant = true, guiActiveEditor = true, guiActive = false, guiName = "Can merge beams")]
-        public bool isBeamMerger = false;
-        [KSPField(isPersistant = true)]
-        public bool forceActivateAtStartup = false;
-        [KSPField(isPersistant = true)]
-        public bool hasLinkedReceivers = false;
+        public const string Group = "BeamedPowerTransmitter";
+        public const string GroupTitle = "#LOC_KSPIE_MicrowavePowerTransmitter_groupName";
 
-        //Non Persistent 
-        [KSPField(isPersistant = false, guiActiveEditor = false, guiActive = false, guiName = "Air Absorbtion Percentage")]
+        //Persistent
+        [KSPField(isPersistant = true)] public double aperture = 1;
+        [KSPField(isPersistant = true)] public double diameter = 0;
+        [KSPField(isPersistant = true)] public bool forceActivateAtStartup;
+        [KSPField(isPersistant = true)] public bool hasLinkedReceivers;
+        [KSPField(isPersistant = true)] public double nativeAtmosphericAbsorptionPercentage = 10;
+        [KSPField(isPersistant = true)] public string partId;
+        [KSPField(isPersistant = true)] public bool IsEnabled;
+        [KSPField(isPersistant = true)] public bool relay;
+        [KSPField(isPersistant = true)] public double nuclear_power;
+        [KSPField(isPersistant = true)] public double solar_power;
+        [KSPField(isPersistant = true)] public double atmosphericAbsorption = 0.1;
+
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_TransmitPower"), UI_FloatRange(stepIncrement = 0.5f, maxValue = 100, minValue = 0)]//Transmission Strength
+        public float transmitPower = 100;
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_CanRelay")]//Can Relay
+        public bool canRelay;
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActiveEditor = true, guiActive = false, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_IsMirror")]//Is Mirror
+        public bool isMirror = false;
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActiveEditor = true, guiActive = false, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_Canmergebeams")]//Can merge beams
+        public bool isBeamMerger = false;
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_MergingBeams")]//Merging Beams
+        public bool mergingBeams;
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActiveEditor = true, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_PowerCapacity", guiUnits = "#LOC_KSPIE_Reactor_megawattUnit", guiFormat = "F2")]//Power Capacity
+        public double power_capacity;
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActiveEditor = false, guiActive = false, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_TransmitWaveLengthm", guiFormat = "F8", guiUnits = " m")]//Transmit WaveLength m
+        public double wavelength;
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActiveEditor = false, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_TransmitWaveLengthSI")]//Transmit WaveLength SI
+        public string wavelengthText;
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActiveEditor = false, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_TransmitWaveLengthWLName")]//Transmit WaveLength WL Name
+        public string wavelengthName;
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActiveEditor = false, guiActive = false, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_MinRelayWaveLength", guiFormat = "F8", guiUnits = " m")]//Min Relay WaveLength
+        public double minimumRelayWavelenght;
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActiveEditor = false, guiActive = false, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_MaxRelayWaveLength", guiFormat = "F8", guiUnits = " m")]//Max Relay WaveLength
+        public double maximumRelayWavelenght;
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActiveEditor = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_NativeWavelength", guiFormat = "F8", guiUnits = " m")]
+        public double nativeWaveLength = 0.003189281;
+
+        //Non Persistent
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActiveEditor = false, guiActive = false, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_AtmosphericAbsorptionPercentage", guiFormat = "F2", guiUnits = "%")]//Air Absorption Percentage
         public double atmosphericAbsorptionPercentage;
-        [KSPField(isPersistant = false, guiActiveEditor = false, guiActive = false, guiName = "Water Absorbtion Percentage")]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActiveEditor = false, guiActive = false, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_WaterAbsorptionPercentage", guiFormat = "F2", guiUnits = "%")]//Water Absorption Percentage
         public double waterAbsorptionPercentage;
-        [KSPField(isPersistant = false, guiActiveEditor = false, guiActive = true, guiName = "Absorbtion Percentage", guiFormat = "F4", guiUnits = "%")]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActiveEditor = false, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_TotalAbsorptionPercentage", guiFormat = "F2", guiUnits = "%")]//Absorption Percentage
         public double totalAbsorptionPercentage;
-        [KSPField(isPersistant = false, guiActiveEditor = false, guiActive = false, guiName = "Body")]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActiveEditor = false, guiActive = false, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_Bodyname")]//Body
         public string body_name;
-        [KSPField(isPersistant = false, guiActiveEditor = false, guiActive = false, guiName = "Biome Name")]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActiveEditor = false, guiActive = false)]
         public string biome_desc;
-        [KSPField(isPersistant = false, guiActiveEditor = false, guiActive = true, guiName = "Moisture Modifier", guiFormat = "F4")]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActiveEditor = false, guiActive = false, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_MoistureModifier", guiFormat = "F3")]//Moisture Modifier
         public double moistureModifier;
-        [KSPField(isPersistant = false, guiActiveEditor = false, guiActive = false)]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActiveEditor = false, guiActive = false)]
         public bool canFunctionOnSurface = true;
 
-        [KSPField(isPersistant = false)]
-        public double maximumPower = 10000;
-        [KSPField(isPersistant = false)]
-        public float atmosphereToleranceModifier = 1;
-        [KSPField(isPersistant = false)]
-        public string animName = "";
-        [KSPField(isPersistant = false, guiActiveEditor = true, guiActive = false, guiName = "Can Transmit")]
+
+
+        //GUI
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActiveEditor = true, guiActive = false, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_CanTransmit")]//Can Transmit
         public bool canTransmit = false;
-        [KSPField(isPersistant = false, guiActiveEditor = true, guiActive = false, guiName = "Build in Relay")]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActiveEditor = true, guiActive = false, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_BuildinRelay")]//Build in Relay
         public bool buildInRelay = false;
-        [KSPField(isPersistant = false, guiActiveEditor = true)]
-        public int compatibleBeamTypes = 1;
-
-
-        [KSPField(isPersistant = true, guiActiveEditor = true)]
-        public double nativeWaveLength = 0.003189281;
-        [KSPField(isPersistant = true, guiActiveEditor = false)]
-        public double nativeAtmosphericAbsorptionPercentage = 10;
-
-        //GUI 
-        [KSPField(isPersistant = false, guiActiveEditor = true, guiActive = false, guiName = "Aperture Diameter", guiFormat = "F2", guiUnits = " m")]
-        public double apertureDiameter = 0;
-        [KSPField(isPersistant = false, guiActive = true, guiName = "Status")]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActiveEditor = true, guiActive = false, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_ApertureDiameter", guiFormat = "F2", guiUnits = " m")]//Aperture Diameter
+        public double apertureDiameter;
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_Status")]//Status
         public string statusStr;
-        [KSPField(isPersistant = false, guiActive = false, guiActiveEditor = true, guiName = "Transmission Efficiency", guiUnits = "%")]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActive = false, guiActiveEditor = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_TransmissionEfficiency", guiFormat = "F1", guiUnits = "%")]//Transmission Efficiency
         public double transmissionEfficiencyPercentage;
-
-        [KSPField(isPersistant = true, guiActive = true, guiName = "Transmission Strength"), UI_FloatRange(stepIncrement = 0.5f, maxValue = 100, minValue = 0)]
-        public float transmitPower = 100;
-
-        [KSPField(isPersistant = false, guiActive = true, guiName = "Wall to Beam Power")]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_BeamedPower")]//Wall to Beam Power
         public string beamedpower;
-        [KSPField(isPersistant = false, guiActive = true, guiName = "Available Power", guiFormat = "F3", guiUnits = " MW", advancedTweakable = true)]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_AvailablePower", guiFormat = "F2", guiUnits = "#LOC_KSPIE_Reactor_megawattUnit", advancedTweakable = true)]//Available Power
         public double availablePower;
-        [KSPField(isPersistant = false, guiActive = true, guiName = "Requested Power", guiFormat = "F3", guiUnits = " MW", advancedTweakable = true)]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_RequestedPower", guiFormat = "F2", guiUnits = "#LOC_KSPIE_Reactor_megawattUnit", advancedTweakable = true)]//Requested Power
         public double requestedPower;
 
-        [KSPField]
-        public bool canBeActive;
-        [KSPField]
-        protected int nearbyPartsCount;
+        // Near Future Compatibility config properties
+        [KSPField] public double powerMult = 1;
+        [KSPField] public double powerHeatMultiplier = 1;
+        [KSPField] public bool canPivot = true;        // determines if effective aperture is affected on surface
+        [KSPField] public double maximumPower = 10000;
+        [KSPField] public float atmosphereToleranceModifier = 1;
+        [KSPField] public string animName = "";
+        [KSPField] public bool canBeActive;
+        [KSPField] protected int nearbyPartsCount;
+        [KSPField] public int compatibleBeamTypes = 1;
 
-        // Near Future Compatibility properties
-        [KSPField(isPersistant = false)]
-        public double powerMult = 1;
-        [KSPField(isPersistant = false)]
-        public double powerHeatMultiplier = 1;
+        private readonly string scalarModuleId = Guid.NewGuid().ToString();
 
-        protected string scalarModuleID = Guid.NewGuid().ToString();
-        protected EventData<float, float> onMoving;
-        protected EventData<float> onStop;
+        private EventData<float, float> onMoving;
+        private EventData<float> onStop;
+
+        public BeamedPowerReceiver partReceiver;
+        public BeamGenerator activeBeamGenerator;
 
         //Internal
-        protected Animation anim;
-        protected List<ISolarPower> solarCells;
-        protected BeamedPowerReceiver part_receiver;
-        protected List<BeamedPowerReceiver> vessel_recievers;
-        protected BeamGenerator activeBeamGenerator;
-        protected List<BeamGenerator> beamGenerators;
-        protected ModuleAnimateGeneric genericAnimation;  
+        private List<ISolarPower> solarCells;
+        private List<BeamedPowerReceiver> vesselReceivers;
+        private List<BeamGenerator> beamGenerators;
+        private ModuleAnimateGeneric genericAnimation;
 
-        public bool CanMove { get { return true; } }
+        private BaseEvent activateTransmitterEvent;
+        private BaseEvent deactivateTransmitterEvent;
+        private BaseEvent activateRelayEvent;
+        private BaseEvent deactivateRelayEvent;
 
-        public float GetScalar { get { return 1; } }
+        private BaseField apertureDiameterField;
+        private BaseField beamedPowerField;
+        private BaseField transmitPowerField;
+        private BaseField totalAbsorptionPercentageField;
+        private BaseField wavelengthField;
+        private BaseField wavelengthNameField;
 
-        public EventData<float, float> OnMoving { get { return onMoving; } }
+        public bool CanMove => true;
+        public float GetScalar => 1;
+        public bool IsRelay => relay;
+        public EventData<float, float> OnMoving => onMoving;
+        public EventData<float> OnStop => onStop;
+        public string ScalarModuleID => scalarModuleId;
 
-        public EventData<float> OnStop { get { return onStop; } }
+        public void SetUIRead(bool state) { }
+        public void SetUIWrite(bool state) { }
 
-        public string ScalarModuleID { get { return scalarModuleID; } }
-
-        public bool IsMoving()
-        {
-            return anim != null ? anim.isPlaying : false;
-        }
-
-        //public void SetScalar(float t)
-        //{
-        //    if (anim != null)
-        //    {
-        //        if (t > 0.5)
-        //        {
-        //            anim[animName].speed = 1;
-        //            anim[animName].normalizedTime = 0;
-        //            anim.Blend(animName, part.mass);
-        //        }
-        //        else
-        //        {
-        //            anim[animName].speed = -1;
-        //            anim[animName].normalizedTime = 1;
-        //            anim.Blend(animName, part.mass);
-        //        }
-        //    }
-        //}
-
-        public void SetUIRead(bool state)
-        {
-            // ignore
-        }
-        public void SetUIWrite(bool state)
-        {
-            // ignore
-        }
-
-        [KSPEvent(guiActive = true, guiName = "Activate Transmitter", active = false)]
+        [KSPEvent(groupName = Group, guiActive = true, guiActiveEditor = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_ActivateTransmitter", active = false)]//Activate Transmitter
         public void ActivateTransmitter()
         {
             if (relay) return;
 
-
             Debug.Log("[KSPI]: BeamedPowerTransmitter on " + part.name + " was Force Activated");
-            this.part.force_activate();
+            part.force_activate();
             forceActivateAtStartup = true;
 
             if (genericAnimation != null && genericAnimation.GetScalar < 1)
-            {
                 genericAnimation.Toggle();
-            }
 
-            //if (anim != null)
-            //{
-            //    anim[animName].speed = 1;
-            //    anim[animName].normalizedTime = 0;
-            //    anim.Blend(animName, part.mass);
-            //}
             IsEnabled = true;
 
             // update wavelength
-            this.wavelength = Wavelength;
+            wavelength = Wavelength;
             minimumRelayWavelenght = wavelength * 0.99;
             maximumRelayWavelenght = wavelength * 1.01;
 
-            this.wavelengthText = WavelenthToText(wavelength);
-            this.wavelengthName = WavelengthName;
+            wavelengthText = WavelengthToText(wavelength);
+            wavelengthName = WavelengthName;
             atmosphericAbsorption = CombinedAtmosphericAbsorption;
         }
 
-        private string WavelenthToText( double wavelength)
+        private string WavelengthToText( double beamWavelength)
         {
-            if (wavelength > 1.0e-3)
-                return (wavelength * 1.0e+3).ToString() + " mm";
-            else if (wavelength > 7.5e-7)
-                return (wavelength * 1.0e+6).ToString() + " µm";
-            else if (wavelength > 1.0e-9)
-                return (wavelength * 1.0e+9).ToString() + " nm";
+            if (beamWavelength > 1.0e-3)
+                return (beamWavelength * 1.0e+3) + " mm";
+            else if (beamWavelength > 7.5e-7)
+                return (beamWavelength * 1.0e+6) + " µm";
+            else if (beamWavelength > 1.0e-9)
+                return (beamWavelength * 1.0e+9) + " nm";
             else
-                return (wavelength * 1.0e+12).ToString() + " pm";
+                return (beamWavelength * 1.0e+12) + " pm";
         }
 
-        [KSPEvent(guiActive = true, guiName = "Deactivate Transmitter", active = false)]
+        [KSPEvent(groupName = Group, guiActive = true, guiActiveEditor = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_DeactivateTransmitter", active = false)]//Deactivate Transmitter
         public void DeactivateTransmitter()
         {
             if (relay) return;
 
-            ScreenMessages.PostScreenMessage("Transmitter deactivated", 4.0f, ScreenMessageStyle.UPPER_CENTER);
+            ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_DeactivateTransmitter_Msg"), 4.0f, ScreenMessageStyle.UPPER_CENTER);//"Transmitter deactivated"
 
             if (genericAnimation != null && genericAnimation.GetScalar > 0)
-            {
                 genericAnimation.Toggle();
-            }
- 
-            //if (anim != null)
-            //{
-            //    anim[animName].speed = -1;
-            //    anim[animName].normalizedTime = 1;
-            //    anim.Blend(animName, part.mass);
-            //}
+
             IsEnabled = false;
         }
 
-        [KSPEvent(guiActive = true, guiName = "Activate Relay", active = false)]
+        [KSPEvent(groupName = Group, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_ActivateRelay", active = false)]//Activate Relay
         public void ActivateRelay()
         {
             if (IsEnabled || relay) return;
 
             if (genericAnimation != null && genericAnimation.GetScalar < 1)
-            {
                 genericAnimation.Toggle();
-            }
 
-            //if (anim != null)
-            //{
-            //    anim[animName].speed = 1;
-            //    anim[animName].normalizedTime = 0;
-            //    anim.Blend(animName, part.mass);
-            //}
-
-            vessel_recievers = this.vessel.FindPartModulesImplementing<BeamedPowerReceiver>().Where(m => m.part != this.part).ToList();
+            vesselReceivers = vessel.FindPartModulesImplementing<BeamedPowerReceiver>().Where(m => m.part != this.part).ToList();
 
             UpdateRelayWavelength();
 
             relay = true;
         }
 
-        [KSPEvent(guiActive = true, guiName = "Deactivate Relay", active = false)]
+        [KSPEvent(groupName = Group, guiActive = true, guiName = "#LOC_KSPIE_MicrowavePowerTransmitter_DeactivateRelay", active = false)]//Deactivate Relay
         public void DeactivateRelay()
         {
             if (!relay) return;
 
-            ScreenMessages.PostScreenMessage("Relay deactivated", 4, ScreenMessageStyle.UPPER_CENTER);
+            ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_DeactivateRelay_Msg"), 4, ScreenMessageStyle.UPPER_CENTER);//"Relay deactivated"
 
             if (genericAnimation != null && genericAnimation.GetScalar > 0)
-            {
                 genericAnimation.Toggle();
-            }
-
-            //if (anim != null)
-            //{
-            //    anim[animName].speed = 1;
-            //    anim[animName].normalizedTime = 0;
-            //    anim.Blend(animName, part.mass);
-            //}
 
             relay = false;
         }
@@ -294,34 +222,34 @@ namespace FNPlugin.Beamedpower
         private void UpdateRelayWavelength()
         {
             // update stored variables
-            this.wavelength = Wavelength;
-            this.wavelengthText = WavelenthToText(wavelength);
-            this.wavelengthName = WavelengthName;
-            this.atmosphericAbsorption = CombinedAtmosphericAbsorption;
+            wavelength = Wavelength;
+            wavelengthText = WavelengthToText(wavelength);
+            wavelengthName = WavelengthName;
+            atmosphericAbsorption = CombinedAtmosphericAbsorption;
 
             if (isMirror)
             {
-                this.hasLinkedReceivers = true;
+                hasLinkedReceivers = true;
                 return;
             }
 
-            // collected all recievers relevant for relay
-            var recieversConfiguredForRelay = vessel_recievers.Where(m => m.linkedForRelay).ToList();
+            // collected all receivers relevant for relay
+            var receiversConfiguredForRelay = vesselReceivers.Where(m => m.linkedForRelay).ToList();
 
             // add build in relay if it can be used for relay
-            if (part_receiver != null && buildInRelay)
-                recieversConfiguredForRelay.Add(part_receiver);
+            if (partReceiver != null && buildInRelay)
+                receiversConfiguredForRelay.Add(partReceiver);
 
-            // determin if we can activat relay
-            this.hasLinkedReceivers = recieversConfiguredForRelay.Count > 0;
+            // determine if we can activate relay
+            hasLinkedReceivers = receiversConfiguredForRelay.Count > 0;
 
-            // use all avialable recievers
-            if (this.hasLinkedReceivers)
+            // use all available receivers
+            if (hasLinkedReceivers)
             {
-                minimumRelayWavelenght = recieversConfiguredForRelay.Min(m => m.minimumWavelength);
-                maximumRelayWavelenght = recieversConfiguredForRelay.Max(m => m.maximumWavelength);
+                minimumRelayWavelenght = receiversConfiguredForRelay.Min(m => m.minimumWavelength);
+                maximumRelayWavelenght = receiversConfiguredForRelay.Max(m => m.maximumWavelength);
 
-                diameter = recieversConfiguredForRelay.Max(m => m.diameter);
+                diameter = receiversConfiguredForRelay.Max(m => m.diameter);
             }
         }
 
@@ -349,21 +277,36 @@ namespace FNPlugin.Beamedpower
             DeactivateRelay();
         }
 
-        public override void OnStart(PartModule.StartState state)
+        public override void OnStart(StartState state)
         {
             onMoving = new EventData<float, float>("transmitterMoving");
             onStop = new EventData<float>("transmitterStop");
 
             power_capacity = maximumPower * powerMult;
 
-            if (String.IsNullOrEmpty(partId))
+            if (string.IsNullOrEmpty(partId))
                 partId = Guid.NewGuid().ToString();
 
             // store  aperture and diameter
             aperture = apertureDiameter;
             diameter = apertureDiameter;
 
+            partReceiver = part.FindModulesImplementing<BeamedPowerReceiver>().FirstOrDefault();
+            genericAnimation = part.FindModulesImplementing<ModuleAnimateGeneric>().FirstOrDefault(m => m.animationName == animName);
+
             ConnectToBeamGenerator();
+
+            activateRelayEvent = Events[nameof(ActivateRelay)];
+            deactivateRelayEvent = Events[nameof(DeactivateRelay)];
+            activateTransmitterEvent = Events[nameof(ActivateTransmitter)];
+            deactivateTransmitterEvent = Events[nameof(DeactivateTransmitter)];
+
+            wavelengthField = Fields[nameof(wavelengthText)];
+            beamedPowerField = Fields[nameof(beamedpower)];
+            transmitPowerField = Fields[nameof(transmitPower)];
+            wavelengthNameField = Fields[nameof(wavelengthName)];
+            apertureDiameterField = Fields[nameof(apertureDiameter)];
+            totalAbsorptionPercentageField = Fields[nameof(totalAbsorptionPercentage)];
 
             if (state == StartState.Editor)
             {
@@ -371,37 +314,15 @@ namespace FNPlugin.Beamedpower
                 return;
             }
 
-            genericAnimation = part.FindModulesImplementing<ModuleAnimateGeneric>().FirstOrDefault(m => m.animationName == animName);
-
             solarCells = vessel.FindPartModulesImplementing<ISolarPower>();
-
-            vessel_recievers = this.vessel.FindPartModulesImplementing<BeamedPowerReceiver>().Where(m => m.part != this.part).ToList();
-            part_receiver = part.FindModulesImplementing<BeamedPowerReceiver>().FirstOrDefault();
+            vesselReceivers = vessel.FindPartModulesImplementing<BeamedPowerReceiver>().Where(m => m.part != this.part).ToList();
 
             UpdateRelayWavelength();
-
-            //anim = part.FindModelAnimators(animName).FirstOrDefault();
-            //if ( anim != null &&  part_receiver == null)
-            //{
-            //    anim[animName].layer = 1;
-            //    if (IsEnabled)
-            //    {
-            //        anim[animName].normalizedTime = 0;
-            //        anim[animName].speed = 1;
-            //    }
-            //    else
-            //    {
-            //        anim[animName].normalizedTime = 1;
-            //        anim[animName].speed = -1;
-            //    }
-            //    //anim.Play();
-            //    anim.Blend(animName, part.mass);
-            //}
 
             if (forceActivateAtStartup)
             {
                 Debug.Log("[KSPI]: BeamedPowerTransmitter on " + part.name + " was Force Activated");
-                this.part.force_activate();
+                part.force_activate();
             }
         }
 
@@ -415,43 +336,41 @@ namespace FNPlugin.Beamedpower
 
         private void ConnectToBeamGenerator()
         {
-            try
+            // connect with beam generators
+            beamGenerators = part.FindModulesImplementing<BeamGenerator>().Where(m => (m.beamType & compatibleBeamTypes) == m.beamType).ToList();
+
+            if (beamGenerators.Count == 0 && part.parent != null)
             {
-                // connect with bbeam gnerators 
-                beamGenerators = part.FindModulesImplementing<BeamGenerator>().Where(m => (m.beamType & compatibleBeamTypes) == m.beamType).ToList();
-
-                if (beamGenerators.Count == 0 && part.parent != null)
-                {
-                    beamGenerators.AddRange(part.parent.FindModulesImplementing<BeamGenerator>().Where(m => (m.beamType & compatibleBeamTypes) == m.beamType));
-                }
-
-                if (beamGenerators.Count == 0)
-                {
-                    var attachedParts = part.attachNodes.Where(m => m.attachedPart != null).Select(m => m.attachedPart).ToList();
-
-                    var parentParts = attachedParts.Where(m => m.parent != null && m.parent != this.part).Select(m => m.parent).ToList();
-                    var indirectParts = attachedParts.SelectMany(m => m.attachNodes.Where(l => l.attachedPart != null && l.attachedPart != this.part).Select(l => l.attachedPart)).ToList();
-
-                    attachedParts.AddRange(indirectParts);
-                    attachedParts.AddRange(parentParts);
-
-                    var nearbyParts = attachedParts.Distinct().ToList();
-                    nearbyPartsCount = nearbyParts.Count();
-
-                    var nearbyGenerators = nearbyParts.Select(m => m.FindModuleImplementing<BeamGenerator>()).Where(l => l != null);
-                    var availableGenerators = nearbyGenerators.SelectMany(m => m.FindBeamGenerators(m.part)).Where(m => (m.beamType & compatibleBeamTypes) == m.beamType).Distinct();
-
-                    beamGenerators.AddRange(availableGenerators);
-                }
-
-                activeBeamGenerator = beamGenerators.FirstOrDefault();
-
-                if (activeBeamGenerator != null && activeBeamGenerator.part != this.part)
-                    activeBeamGenerator.UpdateMass(this.maximumPower);
+                beamGenerators.AddRange(part.parent.FindModulesImplementing<BeamGenerator>().Where(m => (m.beamType & compatibleBeamTypes) == m.beamType));
             }
-            catch (Exception ex)
+
+            if (beamGenerators.Count == 0)
             {
-                Debug.LogError("[KSPI] Microwave Transmitter OnStart search for beamGenerator: " + ex);
+                var attachedParts = part.attachNodes.Where(m => m.attachedPart != null).Select(m => m.attachedPart).ToList();
+
+                var parentParts = attachedParts.Where(m => m.parent != null && m.parent != this.part).Select(m => m.parent).ToList();
+                var indirectParts = attachedParts.SelectMany(m => m.attachNodes.Where(l => l.attachedPart != null && l.attachedPart != this.part).Select(l => l.attachedPart)).ToList();
+
+                attachedParts.AddRange(indirectParts);
+                attachedParts.AddRange(parentParts);
+
+                var nearbyParts = attachedParts.Distinct().ToList();
+                nearbyPartsCount = nearbyParts.Count();
+
+                var nearbyGenerators = nearbyParts.Select(m => m.FindModuleImplementing<BeamGenerator>()).Where(l => l != null);
+                var availableGenerators = nearbyGenerators.SelectMany(m => m.FindBeamGenerators(m.part)).Where(m => (m.beamType & compatibleBeamTypes) == m.beamType).Distinct();
+
+                beamGenerators.AddRange(availableGenerators);
+            }
+
+            activeBeamGenerator = beamGenerators.FirstOrDefault();
+
+            if (activeBeamGenerator != null)
+            {
+                activeBeamGenerator.Connect(this);
+
+                if (activeBeamGenerator.part != this.part)
+                    activeBeamGenerator.UpdateMass(this.maximumPower);
             }
         }
 
@@ -459,24 +378,41 @@ namespace FNPlugin.Beamedpower
         {
             get
             {
-                if (anim == null) 
+                if (vessel == null)
                     return true;
 
-                var pressure = part.atmDensity;      
-                var dynamic_pressure = 0.5 * pressure * 1.2041 * vessel.srf_velocity.sqrMagnitude / 101325.0;
+                var pressure = part.atmDensity;
+                var dynamicPressure = 0.5 * pressure * 1.2041 * vessel.srf_velocity.sqrMagnitude / 101325.0;
 
-                if (dynamic_pressure <= 0) return true;
+                if (dynamicPressure <= 0) return true;
 
-                var pressureLoad = (dynamic_pressure / 1.4854428818159e-3) * 100;
+                var pressureLoad = (dynamicPressure / 1.4854428818159e-3) * 100;
+
                 if (pressureLoad > 100 * atmosphereToleranceModifier)
                     return false;
-                else 
+                else
                     return true;
             }
         }
 
         public void Update()
         {
+            bool vesselInSpace = vessel == null || vessel.situation == Vessel.Situations.PRELAUNCH  || vessel.situation == Vessel.Situations.ORBITING || vessel.situation == Vessel.Situations.ESCAPING || vessel.situation == Vessel.Situations.SUB_ORBITAL;
+            bool receiverOn = partReceiver != null && partReceiver.isActive();
+
+            var canOperateInCurrentEnvironment = canFunctionOnSurface || vesselInSpace;
+            var vesselCanTransmit = canTransmit && canOperateInCurrentEnvironment;
+
+            canRelay = hasLinkedReceivers && canOperateInCurrentEnvironment;
+            canBeActive = CanBeActive;
+            mergingBeams = IsEnabled && canRelay && isBeamMerger;
+
+            activateTransmitterEvent.active = activeBeamGenerator != null && vesselCanTransmit && !IsEnabled && !relay && !receiverOn && canBeActive;
+            deactivateTransmitterEvent.active = IsEnabled;
+
+            activateRelayEvent.active = canRelay && !IsEnabled && !relay && !receiverOn && canBeActive;
+            deactivateRelayEvent.active = relay;
+
             if (!HighLogic.LoadedSceneIsFlight)
             {
                 power_capacity = maximumPower * powerMult;
@@ -488,89 +424,65 @@ namespace FNPlugin.Beamedpower
             totalAbsorptionPercentage = atmosphericAbsorptionPercentage + waterAbsorptionPercentage;
             atmosphericAbsorption = totalAbsorptionPercentage / 100;
 
-            bool vesselInSpace = (vessel.situation == Vessel.Situations.ORBITING || vessel.situation == Vessel.Situations.ESCAPING || vessel.situation == Vessel.Situations.SUB_ORBITAL);
-            bool receiver_on = part_receiver != null && part_receiver.isActive();
-            canBeActive = CanBeActive;
-
-            if (anim != null && !canBeActive && IsEnabled && part.vessel.isActiveVessel && !CheatOptions.UnbreakableJoints)
+            if (!canBeActive && IsEnabled && part.vessel.isActiveVessel && !CheatOptions.UnbreakableJoints)
             {
                 if (relay)
                 {
-                    var message = "Disabled relay because of static pressure atmosphere";
+                    var message = Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_Disabledrelay_Msg");//"Disabled relay because of static pressure atmosphere"
                     ScreenMessages.PostScreenMessage(message, 5f, ScreenMessageStyle.UPPER_CENTER);
                     Debug.Log("KSPI - " + message);
                     DeactivateRelay();
                 }
                 else
                 {
-                    var message = "Disabled transmitter because of static pressure atmosphere";
+                    var message = Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_Disabledtransmitter_Msg");//"Disabled transmitter because of static pressure atmosphere"
                     ScreenMessages.PostScreenMessage(message, 5f, ScreenMessageStyle.UPPER_CENTER);
                     Debug.Log("KSPI - " + message);
                     DeactivateTransmitter();
                 }
             }
 
-            var canOperateInCurrentEnvironment = this.canFunctionOnSurface || vesselInSpace;
-            var vesselCanTransmit = canTransmit && canOperateInCurrentEnvironment;
-
-            Events["ActivateTransmitter"].active = activeBeamGenerator != null && vesselCanTransmit && !IsEnabled && !relay && !receiver_on && canBeActive;
-            Events["DeactivateTransmitter"].active = IsEnabled;
-
-            canRelay = this.hasLinkedReceivers && canOperateInCurrentEnvironment;
-
-            Events["ActivateRelay"].active = canRelay && !IsEnabled && !relay && !receiver_on && canBeActive;
-            Events["DeactivateRelay"].active = relay;
-
-            mergingBeams = IsEnabled && canRelay && isBeamMerger;
-
             bool isTransmitting = IsEnabled && !relay;
+            bool isLinkedForRelay = partReceiver != null && partReceiver.linkedForRelay;
+            bool receiverNotInUse = !isLinkedForRelay && !receiverOn && !IsRelay;
 
-            Fields["apertureDiameter"].guiActive = isTransmitting; 
-            Fields["beamedpower"].guiActive = isTransmitting && canBeActive;
-            Fields["transmitPower"].guiActive = part_receiver == null || !part_receiver.isActive();
+            apertureDiameterField.guiActive = isTransmitting;
+            beamedPowerField.guiActive = isTransmitting && canBeActive;
+            transmitPowerField.guiActive = partReceiver == null || !partReceiver.isActive();
 
-            bool isLinkedForRelay = part_receiver != null && part_receiver.linkedForRelay;
-
-            bool receiverNotInUse = !isLinkedForRelay && !receiver_on && !IsRelay;
-
-            Fields["moistureModifier"].guiActive = receiverNotInUse;
-            Fields["totalAbsorptionPercentage"].guiActive = receiverNotInUse;
-            Fields["wavelength"].guiActive = receiverNotInUse;
-            Fields["wavelengthName"].guiActive = receiverNotInUse;
+            totalAbsorptionPercentageField.guiActive = receiverNotInUse;
+            wavelengthField.guiActive = receiverNotInUse;
+            wavelengthNameField.guiActive = receiverNotInUse;
 
             if (IsEnabled)
-            {
-                statusStr = "Transmitter Active";
-            }
+                statusStr = Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_Statu1");//"Transmitter Active"
             else if (relay)
-            {
-                statusStr = "Relay Active";
-            }
+                statusStr = Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_Statu2");//"Relay Active"
             else
             {
                 if (isLinkedForRelay)
-                    statusStr = "Is Linked For Relay";
-                else if (receiver_on)
-                    statusStr = "Receiver active";
+                    statusStr = Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_Statu3");//"Is Linked For Relay"
+                else if (receiverOn)
+                    statusStr = Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_Statu4");//"Receiver active"
                 else if (canRelay)
-                    statusStr = "Is ready for relay";
+                    statusStr = Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_Statu5");//"Is ready for relay"
                 else if (beamGenerators.Count == 0)
-                    statusStr = "No beam generator found";
+                    statusStr = Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_Statu6");//"No beam generator found"
                 else
-                    statusStr = "Inactive.";
+                    statusStr = Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_Statu7");//"Inactive."
             }
 
             if (activeBeamGenerator == null)
             {
-                var wavelegthField = Fields["wavelength"];
-                wavelegthField.guiActive = false;
-                wavelegthField.guiActiveEditor = false;
+                var waveLengthField = Fields[nameof(wavelength)];
+                waveLengthField.guiActive = false;
+                waveLengthField.guiActiveEditor = false;
 
-                var atmosphericAbsorptionPercentageField = Fields["atmosphericAbsorptionPercentage"];
+                var atmosphericAbsorptionPercentageField = Fields[nameof(atmosphericAbsorptionPercentage)];
                 atmosphericAbsorptionPercentageField.guiActive = false;
                 atmosphericAbsorptionPercentageField.guiActiveEditor = false;
 
-                var waterAbsorptionPercentageField = Fields["waterAbsorptionPercentage"];
+                var waterAbsorptionPercentageField = Fields[nameof(waterAbsorptionPercentage)];
                 waterAbsorptionPercentageField.guiActive = false;
                 waterAbsorptionPercentageField.guiActiveEditor = false;
 
@@ -578,21 +490,11 @@ namespace FNPlugin.Beamedpower
             }
 
             wavelength = activeBeamGenerator.wavelength;
-            wavelengthText = WavelenthToText(wavelength);
+            wavelengthText = WavelengthToText(wavelength);
             atmosphericAbsorptionPercentage = activeBeamGenerator.atmosphericAbsorptionPercentage;
             waterAbsorptionPercentage = activeBeamGenerator.waterAbsorptionPercentage * moistureModifier;
 
-            double inputPower = nuclear_power + solar_power;
-            if (inputPower > 1000)
-            {
-                if (inputPower > 1e6)
-                    beamedpower = (inputPower / 1e6).ToString("0.000") + " GW";
-                else
-                    beamedpower = (inputPower / 1000).ToString("0.000") + " MW";
-            }
-            else
-                beamedpower = inputPower.ToString("0.000") + " KW";
-
+            beamedpower = PluginHelper.GetFormattedPowerString((nuclear_power + solar_power) / GameConstants.ecPerMJ);
             solarCells = vessel.FindPartModulesImplementing<ISolarPower>();
         }
 
@@ -624,7 +526,7 @@ namespace FNPlugin.Beamedpower
                 double transmissionWasteRatio = (100 - activeBeamGenerator.efficiencyPercentage) / 100d;
                 double transmissionEfficiencyRatio = activeBeamGenerator.efficiencyPercentage / 100d;
 
-                availablePower = getAvailableStableSupply(ResourceManager.FNRESOURCE_MEGAJOULES);
+                availablePower = GetAvailableStableSupply(ResourceSettings.Config.ElectricPowerInMegawatt);
 
                 if (CheatOptions.InfiniteElectricity)
                 {
@@ -632,25 +534,24 @@ namespace FNPlugin.Beamedpower
                 }
                 else
                 {
-                    var megajoulesRatio = getResourceBarRatio(ResourceManager.FNRESOURCE_MEGAJOULES);
-                    var wasteheatRatio = getResourceBarRatio(ResourceManager.FNRESOURCE_WASTEHEAT);
+                    var megajoulesRatio = GetResourceBarRatio(ResourceSettings.Config.ElectricPowerInMegawatt);
+                    var wasteheatRatio = GetResourceBarRatio(ResourceSettings.Config.WasteHeatInMegawatt);
 
-                    var effectiveResourceThrotling = Math.Min(megajoulesRatio > 0.5 ? 1 : megajoulesRatio * 2, wasteheatRatio < 0.9 ? 1 : (1  - wasteheatRatio) * 10);
+                    var effectiveResourceThrottling = Math.Min(megajoulesRatio > 0.5 ? 1 : megajoulesRatio * 2, wasteheatRatio < 0.9 ? 1 : (1  - wasteheatRatio) * 10);
 
-                    requestedPower = Math.Min(Math.Min(power_capacity, availablePower) * powerTransmissionRatio, effectiveResourceThrotling * availablePower);
+                    requestedPower = Math.Min(Math.Min(power_capacity, availablePower) * powerTransmissionRatio, effectiveResourceThrottling * availablePower);
                 }
 
-                var receivedPower = CheatOptions.InfiniteElectricity
-                    ? requestedPower
-                    : consumeFNResourcePerSecond(requestedPower, ResourceManager.FNRESOURCE_MEGAJOULES);
+                double receivedPower = CheatOptions.InfiniteElectricity ? requestedPower :
+                    ConsumeFnResourcePerSecond(requestedPower, ResourceSettings.Config.ElectricPowerInMegawatt);
 
-                nuclear_power += 1000 * transmissionEfficiencyRatio * receivedPower;
+                nuclear_power += GameConstants.ecPerMJ * transmissionEfficiencyRatio * receivedPower;
 
-                solar_power += 1000 * transmissionEfficiencyRatio * solarCells.Sum(m => m.SolarPower);
+                solar_power += GameConstants.ecPerMJ * transmissionEfficiencyRatio * solarCells.Sum(m => m.SolarPower);
 
                 // generate wasteheat for converting electric power to beamed power
                 if (!CheatOptions.IgnoreMaxTemperature)
-                    supplyFNResourcePerSecond(receivedPower * transmissionWasteRatio, ResourceManager.FNRESOURCE_WASTEHEAT);
+                    SupplyFnResourcePerSecond(receivedPower * transmissionWasteRatio, ResourceSettings.Config.WasteHeatInMegawatt);
             }
 
             // extract solar power from stable power
@@ -665,74 +566,53 @@ namespace FNPlugin.Beamedpower
 
         private void CollectBiomeData()
         {
-            try
+            moistureModifier = 0;
+            biome_desc = string.Empty;
+
+            if (part.vessel == null) return;
+
+            double lat = vessel.latitude * Math.PI / 180d;
+            double lon = vessel.longitude * Math.PI / 180d;
+
+            if (part.vessel.mainBody == null) return;
+
+            body_name = part.vessel.mainBody.name;
+
+            if (part.vessel.mainBody.BiomeMap == null) return;
+
+            var attribute = part.vessel.mainBody.BiomeMap.GetAtt(lat, lon);
+
+            if (attribute == null) return;
+
+            biome_desc = attribute.name;
+
+            double cloudVariance;
+            if (body_name == "Kerbin" || body_name == "Earth")
             {
-                moistureModifier = 0;
-                biome_desc = string.Empty;
-
-                if (part.vessel == null) return;
-
-                double lat = vessel.latitude * Math.PI / 180d;
-                double lon = vessel.longitude * Math.PI / 180d;
-
-                if (part.vessel.mainBody == null) return;
-
-                body_name = part.vessel.mainBody.name;
-
-                if (part.vessel.mainBody.BiomeMap == null) return;
-
-                var attribute = part.vessel.mainBody.BiomeMap.GetAtt(lat, lon);
-
-                if (attribute == null) return;
-
-                biome_desc = attribute.name;
-
-                double cloud_variance;
-                if (body_name == "Kerbin" || body_name == "Earth")
-                {
-                    if (biome_desc == "Desert" || biome_desc == "Ice Caps" || biome_desc == "BadLands")
-                        moistureModifier = 0.4;
-                    else if (biome_desc == " Water")
-                        moistureModifier = 1;
-                    else
-                        moistureModifier = 0.8;
-
-                    cloud_variance = 0.5d + (Planetarium.GetUniversalTime() % 3600 / 7200d);
-                }
+                if (biome_desc == "Desert" || biome_desc == "Ice Caps" || biome_desc == "BadLands")
+                    moistureModifier = 0.4;
+                else if (biome_desc == "Water")
+                    moistureModifier = 1;
                 else
-                    cloud_variance = 1;
+                    moistureModifier = 0.8;
 
-                double latitude_variance = ((180d - lat) / 180d);
-
-                moistureModifier = 2 * moistureModifier * latitude_variance * cloud_variance;
+                cloudVariance = 0.5d + (Planetarium.GetUniversalTime() % 3600 / 7200d);
             }
-            catch (NullReferenceException e)
-            {
-                Debug.LogError("[KSPI]: exception in CollectBiomeData " + e.Message + " at " + e.StackTrace);
-            }
+            else
+                cloudVariance = 1;
+
+            double latitudeVariance = (180d - lat) / 180d;
+
+            moistureModifier = 2 * moistureModifier * latitudeVariance * cloudVariance;
         }
 
-        public double getPowerCapacity()
-        {
-            return power_capacity;
-        }
+        public double PowerCapacity => power_capacity;
 
-        public double Wavelength
-        {
-            get { return activeBeamGenerator != null ? activeBeamGenerator.wavelength : nativeWaveLength; }
-        }
+        public double Wavelength => activeBeamGenerator != null ? activeBeamGenerator.wavelength : nativeWaveLength;
 
-        public string WavelengthName
-        {
-            get { return activeBeamGenerator != null ? activeBeamGenerator.beamWaveName : ""; }
-        }
+        public string WavelengthName => activeBeamGenerator != null ? activeBeamGenerator.beamWaveName : "";
 
-        public double CombinedAtmosphericAbsorption
-        {
-            get { return activeBeamGenerator != null
-                ? (atmosphericAbsorptionPercentage + waterAbsorptionPercentage) / 100d 
-                : nativeAtmosphericAbsorptionPercentage / 100d; } 
-        }
+        public double CombinedAtmosphericAbsorption => activeBeamGenerator != null ? (atmosphericAbsorptionPercentage + waterAbsorptionPercentage) / 100d : nativeAtmosphericAbsorptionPercentage / 100d;
 
         public double getNuclearPower()
         {
@@ -744,40 +624,34 @@ namespace FNPlugin.Beamedpower
             return solar_power;
         }
 
-        public bool IsRelay
-        {
-            get { return relay;  }
-        }
-
         public bool isActive()
         {
             return IsEnabled;
         }
 
-        public static IVesselRelayPersistence getVesselRelayPersistenceForVessel(Vessel vessel)
+        public static IVesselRelayPersistence GetVesselRelayPersistenceForVessel(Vessel vessel)
         {
-            // find all active tranmitters configured for relay
+            // find all active transmitters configured for relay
             var relays = vessel.FindPartModulesImplementing<BeamedPowerTransmitter>().Where(m => m.IsRelay || m.mergingBeams).ToList();
             if (relays.Count == 0)
                 return null;
 
-            var relayPersistance = new VesselRelayPersistence(vessel);
-            relayPersistance.IsActive = true;
+            var relayPersistence = new VesselRelayPersistence(vessel) {IsActive = true};
 
-            if (relayPersistance.IsActive)
-                return relayPersistance;
-            
+            //if (relayPersistence.IsActive)
+            //    return relayPersistence;
+
             foreach (var relay in relays)
             {
-                var transmitData = relayPersistance.SupportedTransmitWavelengths.FirstOrDefault(m => m.wavelength == relay.wavelength);
+                var transmitData = relayPersistence.SupportedTransmitWavelengths.FirstOrDefault(m => m.wavelength == relay.wavelength);
                 if (transmitData == null)
                 {
                     // Add guid if missing
-                    relay.partId = string.IsNullOrEmpty(relay.partId) 
-                        ? Guid.NewGuid().ToString() 
+                    relay.partId = string.IsNullOrEmpty(relay.partId)
+                        ? Guid.NewGuid().ToString()
                         : relay.partId;
 
-                    relayPersistance.SupportedTransmitWavelengths.Add(new WaveLengthData()
+                    relayPersistence.SupportedTransmitWavelengths.Add(new WaveLengthData()
                     {
                         partId = new Guid(relay.partId),
                         count = 1,
@@ -798,23 +672,22 @@ namespace FNPlugin.Beamedpower
                 }
             }
 
-            relayPersistance.Aperture = relays.Average(m => m.aperture) * Approximate.Sqrt(relays.Count);
-            relayPersistance.Diameter = relays.Average(m => m.diameter);
-            relayPersistance.PowerCapacity = relays.Sum(m => m.getPowerCapacity());
-            relayPersistance.MinimumRelayWavelenght = relays.Min(m => m.minimumRelayWavelenght);
-            relayPersistance.MaximumRelayWavelenght = relays.Max(m => m.maximumRelayWavelenght);
+            relayPersistence.Aperture = relays.Average(m => m.aperture) * Math.Sqrt(relays.Count);
+            relayPersistence.Diameter = relays.Average(m => m.diameter);
+            relayPersistence.PowerCapacity = relays.Sum(m => m.PowerCapacity);
+            relayPersistence.MinimumRelayWavelenght = relays.Min(m => m.minimumRelayWavelenght);
+            relayPersistence.MaximumRelayWavelenght = relays.Max(m => m.maximumRelayWavelenght);
 
-            return relayPersistance;
+            return relayPersistence;
         }
 
-        public static IVesselMicrowavePersistence getVesselMicrowavePersistanceForVessel(Vessel vessel)
+        public static IVesselMicrowavePersistence GetVesselMicrowavePersistenceForVessel(Vessel vessel)
         {
             var transmitters = vessel.FindPartModulesImplementing<BeamedPowerTransmitter>().Where(m => m.IsEnabled).ToList();
             if (transmitters.Count == 0)
                 return null;
 
-            var vesselTransmitters = new VesselMicrowavePersistence(vessel);
-            vesselTransmitters.IsActive = true;
+            var vesselTransmitters = new VesselMicrowavePersistence(vessel) {IsActive = true};
 
             foreach (var transmitter in transmitters)
             {
@@ -854,7 +727,7 @@ namespace FNPlugin.Beamedpower
             vesselTransmitters.Aperture = transmitters.Average(m => m.aperture) * transmitters.Count.Sqrt();
             vesselTransmitters.NuclearPower = transmitters.Sum(m => m.getNuclearPower());
             vesselTransmitters.SolarPower = transmitters.Sum(m => m.getSolarPower());
-            vesselTransmitters.PowerCapacity = transmitters.Sum(m => m.getPowerCapacity());
+            vesselTransmitters.PowerCapacity = transmitters.Sum(m => m.PowerCapacity);
 
             return vesselTransmitters;
         }
@@ -864,7 +737,7 @@ namespace FNPlugin.Beamedpower
         /// </summary>
         /// <param name="vessel"></param>
         /// <returns></returns>
-        public static IVesselMicrowavePersistence getVesselMicrowavePersistanceForProtoVessel(Vessel vessel)
+        public static IVesselMicrowavePersistence GetVesselMicrowavePersistenceForProtoVessel(Vessel vessel)
         {
             var transmitter = new VesselMicrowavePersistence(vessel);
             int totalCount = 0;
@@ -874,23 +747,23 @@ namespace FNPlugin.Beamedpower
             double totalSolarPower = 0.0;
             double totalPowerCapacity = 0.0;
 
-            foreach (var protopart in vessel.protoVessel.protoPartSnapshots)
+            foreach (var protoPart in vessel.protoVessel.protoPartSnapshots)
             {
-                foreach (var protomodule in protopart.modules)
+                foreach (var protoModule in protoPart.modules)
                 {
-                    if (protomodule.moduleName != "MicrowavePowerTransmitter" && protomodule.moduleName != "PhasedArrayTransmitter" && protomodule.moduleName != "BeamedPowerLaserTransmitter")
+                    if (protoModule.moduleName != "MicrowavePowerTransmitter" && protoModule.moduleName != "PhasedArrayTransmitter" && protoModule.moduleName != "BeamedPowerLaserTransmitter")
                         continue;
 
                     // filter on active transmitters
-                    bool transmitterIsEnabled = bool.Parse(protomodule.moduleValues.GetValue("IsEnabled"));
+                    var transmitterIsEnabled = bool.Parse(protoModule.moduleValues.GetValue("IsEnabled"));
                     if (!transmitterIsEnabled)
                         continue;
 
-                    var aperture = double.Parse(protomodule.moduleValues.GetValue("aperture"));
-                    var nuclearPower = double.Parse(protomodule.moduleValues.GetValue("nuclear_power"));
-                    var solarPower = double.Parse(protomodule.moduleValues.GetValue("solar_power"));
-                    var powerCapacity = double.Parse(protomodule.moduleValues.GetValue("power_capacity"));
-                    var wavelength = double.Parse(protomodule.moduleValues.GetValue("wavelength"));
+                    var aperture = double.Parse(protoModule.moduleValues.GetValue("aperture"));
+                    var nuclearPower = double.Parse(protoModule.moduleValues.GetValue("nuclear_power"));
+                    var solarPower = double.Parse(protoModule.moduleValues.GetValue("solar_power"));
+                    var powerCapacity = double.Parse(protoModule.moduleValues.GetValue("power_capacity"));
+                    var wavelength = double.Parse(protoModule.moduleValues.GetValue("wavelength"));
 
                     totalCount++;
                     totalAperture += aperture;
@@ -901,8 +774,8 @@ namespace FNPlugin.Beamedpower
                     var transmitData = transmitter.SupportedTransmitWavelengths.FirstOrDefault(m => m.wavelength == wavelength);
                     if (transmitData == null)
                     {
-                        bool isMirror = bool.Parse(protomodule.moduleValues.GetValue("isMirror"));
-                        string partId = protomodule.moduleValues.GetValue("partId");
+                        bool isMirror = bool.Parse(protoModule.moduleValues.GetValue("isMirror"));
+                        string partId = protoModule.moduleValues.GetValue("partId");
 
                         transmitter.SupportedTransmitWavelengths.Add(new WaveLengthData()
                         {
@@ -916,7 +789,7 @@ namespace FNPlugin.Beamedpower
                             nuclearPower = nuclearPower,
                             solarPower = solarPower,
                             powerCapacity = powerCapacity,
-                            atmosphericAbsorption = double.Parse(protomodule.moduleValues.GetValue("atmosphericAbsorption"))
+                            atmosphericAbsorption = double.Parse(protoModule.moduleValues.GetValue("atmosphericAbsorption"))
                         });
                     }
                     else
@@ -939,7 +812,7 @@ namespace FNPlugin.Beamedpower
             return transmitter;
         }
 
-        public static IVesselRelayPersistence getVesselRelayPersistanceForProtoVessel(Vessel vessel)
+        public static IVesselRelayPersistence GetVesselRelayPersistenceForProtoVessel(Vessel vessel)
         {
             var relayVessel = new VesselRelayPersistence(vessel);
             int totalCount = 0;
@@ -950,46 +823,46 @@ namespace FNPlugin.Beamedpower
             double minimumRelayWavelength = 1;
             double maximumRelayWavelenght = 0;
 
-            foreach (var protopart in vessel.protoVessel.protoPartSnapshots)
+            foreach (var protoPart in vessel.protoVessel.protoPartSnapshots)
             {
-                foreach (var protomodule in protopart.modules)
+                foreach (var protoModule in protoPart.modules)
                 {
-                    if (protomodule.moduleName != "MicrowavePowerTransmitter" && protomodule.moduleName != "PhasedArrayTransmitter" && protomodule.moduleName != "BeamedPowerLaserTransmitter")
+                    if (protoModule.moduleName != "MicrowavePowerTransmitter" && protoModule.moduleName != "PhasedArrayTransmitter" && protoModule.moduleName != "BeamedPowerLaserTransmitter")
                         continue;
 
-                    bool inRelayMode = bool.Parse(protomodule.moduleValues.GetValue("relay"));
+                    bool inRelayMode = bool.Parse(protoModule.moduleValues.GetValue("relay"));
 
                     bool isMergingBeams = false;
-                    if (protomodule.moduleValues.HasValue("mergingBeams"))
-                        isMergingBeams = bool.Parse(protomodule.moduleValues.GetValue("mergingBeams"));
+                    if (protoModule.moduleValues.HasValue("mergingBeams"))
+                        isMergingBeams = bool.Parse(protoModule.moduleValues.GetValue("mergingBeams"));
 
                     // filter on transmitters
                     if (inRelayMode || isMergingBeams)
                     {
-                        var wavelength = double.Parse(protomodule.moduleValues.GetValue("wavelength"));
-                        var isMirror = bool.Parse(protomodule.moduleValues.GetValue("isMirror"));
-                        var aperture = double.Parse(protomodule.moduleValues.GetValue("aperture"));                        
-                        var powerCapacity = double.Parse(protomodule.moduleValues.GetValue("power_capacity"));
+                        var wavelength = double.Parse(protoModule.moduleValues.GetValue("wavelength"));
+                        var isMirror = bool.Parse(protoModule.moduleValues.GetValue("isMirror"));
+                        var aperture = double.Parse(protoModule.moduleValues.GetValue("aperture"));
+                        var powerCapacity = double.Parse(protoModule.moduleValues.GetValue("power_capacity"));
 
-                        var diameter = protomodule.moduleValues.HasValue("diameter") ? double.Parse(protomodule.moduleValues.GetValue("diameter")) : aperture;
+                        var diameter = protoModule.moduleValues.HasValue("diameter") ? double.Parse(protoModule.moduleValues.GetValue("diameter")) : aperture;
 
                         totalCount++;
                         totalAperture += aperture;
                         totalDiameter += diameter;
                         totalPowerCapacity += powerCapacity;
 
-                        var relayWavelenghtMin = double.Parse(protomodule.moduleValues.GetValue("minimumRelayWavelenght"));
+                        var relayWavelenghtMin = double.Parse(protoModule.moduleValues.GetValue("minimumRelayWavelenght"));
                         if (relayWavelenghtMin < minimumRelayWavelength)
                             minimumRelayWavelength = relayWavelenghtMin;
 
-                        var relayWavelenghtMax = double.Parse(protomodule.moduleValues.GetValue("maximumRelayWavelenght"));
+                        var relayWavelenghtMax = double.Parse(protoModule.moduleValues.GetValue("maximumRelayWavelenght"));
                         if (relayWavelenghtMax > maximumRelayWavelenght)
                             maximumRelayWavelenght = relayWavelenghtMax;
 
                         var relayData = relayVessel.SupportedTransmitWavelengths.FirstOrDefault(m => m.wavelength == wavelength);
                         if (relayData == null)
                         {
-                            string partId = protomodule.moduleValues.GetValue("partId");
+                            string partId = protoModule.moduleValues.GetValue("partId");
 
                             relayVessel.SupportedTransmitWavelengths.Add(new WaveLengthData()
                             {
@@ -999,9 +872,9 @@ namespace FNPlugin.Beamedpower
                                 powerCapacity = powerCapacity,
                                 wavelength = wavelength,
                                 minWavelength = relayWavelenghtMin,
-                                maxWavelength = relayWavelenghtMax, 
+                                maxWavelength = relayWavelenghtMax,
                                 isMirror = isMirror,
-                                atmosphericAbsorption = double.Parse(protomodule.moduleValues.GetValue("atmosphericAbsorption"))
+                                atmosphericAbsorption = double.Parse(protoModule.moduleValues.GetValue("atmosphericAbsorption"))
                             });
                         }
                         else
@@ -1026,14 +899,18 @@ namespace FNPlugin.Beamedpower
 
         public override string GetInfo()
         {
-            var info = new StringBuilder();
+            var info = StringBuilderCache.Acquire();
 
-            info.AppendLine("Aperture Diameter: " + apertureDiameter + " m");
-            info.AppendLine("Can Mirror power: " + isMirror.ToString());
-            info.AppendLine("Can Transmit power: " + canTransmit.ToString());
-            info.AppendLine("Can Relay independantly " + buildInRelay.ToString());
+            info.Append(Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_info1"));//Aperture Diameter
+            info.Append(": ").Append(apertureDiameter.ToString("F1")).AppendLine(" m");
+            info.Append(Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_info2"));//Can Mirror power
+            info.Append(": ").AppendLine(RUIutils.GetYesNoUIString(isMirror));
+            info.Append(Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_info3"));//Can Transmit power
+            info.Append(": ").AppendLine(RUIutils.GetYesNoUIString(canTransmit));
+            info.Append(Localizer.Format("#LOC_KSPIE_MicrowavePowerTransmitter_info4"));//Can Relay independently
+            info.Append(": ").AppendLine(RUIutils.GetYesNoUIString(buildInRelay));
 
-            return info.ToString();
+            return info.ToStringAndRelease();
         }
     }
 }

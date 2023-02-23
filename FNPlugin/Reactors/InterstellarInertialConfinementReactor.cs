@@ -1,5 +1,7 @@
-﻿using System;
-using FNPlugin.Extensions;
+﻿using FNPlugin.Extensions;
+using FNPlugin.Resources;
+using KSP.Localization;
+using System;
 
 namespace FNPlugin.Reactors
 {
@@ -22,74 +24,60 @@ namespace FNPlugin.Reactors
     class InterstellarInertialConfinementReactor : InterstellarFusionReactor
     {
         // Configs
-        [KSPField(guiActiveEditor = true)]
-        public string primaryInputResource = ResourceManager.FNRESOURCE_MEGAJOULES;
-        [KSPField(guiActiveEditor = true)]
-        public string secondaryInputResource = ResourceManager.STOCK_RESOURCE_ELECTRICCHARGE;
-        [KSPField]
-        public double primaryInputMultiplier = 1;
-        [KSPField]
-        public double secondaryInputMultiplier = 1000;
-        [KSPField]
-        public bool canJumpstart = true;
-        [KSPField]
-        public bool usePowerManagerForPrimaryInputPower = true;
-        [KSPField]
-        public bool usePowerManagerForSecondaryInputPower = true;
-        [KSPField]
-        public bool canChargeJumpstart = true;
-        [KSPField]
-        public float startupPowerMultiplier = 1;
-        [KSPField]
-        public float startupCostGravityMultiplier = 0;
-        [KSPField]
-        public float startupCostGravityExponent = 1;
-        [KSPField]
-        public float startupMaximumGeforce = 10000;
-        [KSPField]
-        public float startupMinimumChargePercentage = 0;
-        [KSPField]
-        public double geeForceMaintenancePowerMultiplier = 0;
+        [KSPField] public string primaryInputResource = ResourceSettings.Config.ElectricPowerInMegawatt;
+        [KSPField] public string secondaryInputResource = ResourceSettings.Config.ElectricPowerInKilowatt;
+        [KSPField] public double primaryInputMultiplier = 1;
+        [KSPField] public double secondaryInputMultiplier = 1000;
+        [KSPField] public bool canJumpstart = true;
+        [KSPField] public bool usePowerManagerForPrimaryInputPower = true;
+        [KSPField] public bool usePowerManagerForSecondaryInputPower = true;
+        [KSPField] public bool canChargeJumpstart = true;
+        [KSPField] public float startupPowerMultiplier = 1;
+        [KSPField] public float startupCostGravityMultiplier = 0;
+        [KSPField] public float startupCostGravityExponent = 1;
+        [KSPField] public float startupMaximumGeforce = 10000;
+        [KSPField] public float startupMinimumChargePercentage = 0;
+        [KSPField] public double geeForceMaintenancePowerMultiplier = 0;
+        [KSPField] public bool showSecondaryPowerUsage = false;
+        [KSPField] public double gravityDivider;
 
-        // Persistant
+        // Persistent
         [KSPField(isPersistant = true)]
         public double accumulatedElectricChargeInMW;
-        [KSPField(guiActiveEditor = true, guiName = "Power Affects Maintenance")]
-        public bool powerControlAffectsMaintenance = true;
-        [KSPField(isPersistant = true, guiName = "Startup"), UI_Toggle(disabledText = "Off", enabledText = "Charging")]
-        public bool isChargingForJumpstart;
-        [KSPField(isPersistant = true, guiActive = true, guiName = "Max Secondary Power Usage"), UI_FloatRange(stepIncrement = 1f / 3f, maxValue = 100, minValue = 1)]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, isPersistant = true, guiActive = true, guiName = "#LOC_KSPIE_InertialConfinementReactor_MaxSecondaryPowerUsage"), UI_FloatRange(stepIncrement = 1f / 3f, maxValue = 100, minValue = 1)]//Max Secondary Power Usage
         public float maxSecondaryPowerUsage = 90;
+        [KSPField(groupName = Group, guiName = "#LOC_KSPIE_InertialConfinementReactor_PowerAffectsMaintenance")]//Power Affects Maintenance
+        public bool powerControlAffectsMaintenance = true;
 
         // UI Display
-        [KSPField(guiActive = false, guiUnits = "%", guiName = "Minimum Throtle", guiFormat = "F2")]
+        [KSPField(groupName = Group, guiActive = false, guiUnits = "%", guiName = "#LOC_KSPIE_InertialConfinementReactor_MinimumThrotle", guiFormat = "F2")]//Minimum Throtle
         public double minimumThrottlePercentage;
-        [KSPField(guiActive = true, guiName = "Charge")]
-        public string accumulatedChargeStr = String.Empty;
-        [KSPField(guiActive = false, guiName = "Fusion Power Requirement", guiFormat = "F2")]
+        [KSPField(groupName = Group, groupDisplayName = GroupTitle, guiActive = true, guiName = "#LOC_KSPIE_InertialConfinementReactor_Charge")]//Charge
+        public string accumulatedChargeStr = string.Empty;
+        [KSPField(groupName = Group, guiActive = false, guiName = "#LOC_KSPIE_InertialConfinementReactor_FusionPowerRequirement", guiFormat = "F2")]//Fusion Power Requirement
         public double currentLaserPowerRequirements = 0;
+        [KSPField(groupName = Group, isPersistant = true, guiName = "#LOC_KSPIE_InertialConfinementReactor_Startup"), UI_Toggle(disabledText = "#LOC_KSPIE_InertialConfinementReactor_Startup_Off", enabledText = "#LOC_KSPIE_InertialConfinementReactor_Startup_Charging")]//Startup--Off--Charging
+        public bool isChargingForJumpstart;
 
-        [KSPField(guiActive = false)]
-        public double gravityDivider;
+        private double _powerConsumed;
+        private int jumpStartPowerTime;
+        private double _framesPlasmaRatioIsGood;
 
-        double power_consumed;
-        int jumpstartPowerTime;
-        double framesPlasmaRatioIsGood;
+        private BaseField isChargingField;
+        private BaseField accumulatedChargeStrField;
+        private PartResourceDefinition primaryInputResourceDefinition;
+        private PartResourceDefinition secondaryInputResourceDefinition;
 
-        BaseField isChargingField;
-        BaseField accumulatedChargeStrField;
-        PartResourceDefinition primaryInputResourceDefinition;
-        PartResourceDefinition secondaryInputResourceDefinition;
-
-        public override double PlasmaModifier
-        {
-            get { return plasma_ratio; }
-        }
+        public override double PlasmaModifier => plasma_ratio;
+        public double GravityDivider => startupCostGravityMultiplier * Math.Pow(FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude, startupCostGravityExponent);
 
         public override void OnStart(PartModule.StartState state)
         {
-            isChargingField = Fields["isChargingForJumpstart"];
-            accumulatedChargeStrField = Fields["accumulatedChargeStr"];
+            isChargingField = Fields[nameof(isChargingForJumpstart)];
+            accumulatedChargeStrField = Fields[nameof(accumulatedChargeStr)];
+
+            Fields[nameof(maxSecondaryPowerUsage)].guiActive = showSecondaryPowerUsage;
+            Fields[nameof(maxSecondaryPowerUsage)].guiActiveEditor = showSecondaryPowerUsage;
 
             isChargingField.guiActiveEditor = false;
 
@@ -104,7 +92,7 @@ namespace FNPlugin.Reactors
                 }
                 else
                 {
-                    jumpstartPowerTime = 50;
+                    jumpStartPowerTime = 50;
                     IsEnabled = true;
                     reactor_power_ratio = 1;
                 }
@@ -131,7 +119,7 @@ namespace FNPlugin.Reactors
         {
             get
             {
-                var currentMinimumThrottle = (powerPercentage > 0 && base.MinimumThrottle > 0)
+                var currentMinimumThrottle = powerPercentage > 0 && base.MinimumThrottle > 0
                     ? Math.Min(base.MinimumThrottle / PowerRatio, 1)
                     : base.MinimumThrottle;
 
@@ -149,8 +137,8 @@ namespace FNPlugin.Reactors
                     CurrentFuelMode == null
                     ? PowerRequirement
                     : powerControlAffectsMaintenance
-                        ? PowerRatio * NormalizedPowerRequirment
-                        : NormalizedPowerRequirment;
+                        ? PowerRatio * NormalizedPowerRequirement
+                        : NormalizedPowerRequirement;
 
                 if (geeForceMaintenancePowerMultiplier > 0)
                     currentLaserPowerRequirements += Math.Abs(currentLaserPowerRequirements * geeForceMaintenancePowerMultiplier * part.vessel.geeForce);
@@ -159,21 +147,16 @@ namespace FNPlugin.Reactors
             }
         }
 
-        public double GravityDivider
-        {
-            get { return startupCostGravityMultiplier * Math.Pow(FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude, startupCostGravityExponent); }
-        }
-
         public double StartupPower
         {
             get
             {
                 var startupPower = startupPowerMultiplier * LaserPowerRequirements;
-                if (startupCostGravityMultiplier > 0)
-                {
-                    gravityDivider = GravityDivider;
-                    startupPower = gravityDivider > 0 ? startupPower / gravityDivider : startupPower;
-                }
+
+                if (!(startupCostGravityMultiplier > 0)) return startupPower;
+
+                gravityDivider = GravityDivider;
+                startupPower = gravityDivider > 0 ? startupPower / gravityDivider : startupPower;
 
                 return startupPower;
             }
@@ -195,18 +178,15 @@ namespace FNPlugin.Reactors
         public override void OnUpdate()
         {
             if (isChargingField.guiActive)
-            {
-                accumulatedChargeStr = PluginHelper.getFormattedPowerString(accumulatedElectricChargeInMW, "0.0", "0.000")
-                    + " / " + PluginHelper.getFormattedPowerString(StartupPower, "0.0", "0.000");
-            }
+                accumulatedChargeStr = PluginHelper.GetFormattedPowerString(accumulatedElectricChargeInMW) + " / " + PluginHelper.GetFormattedPowerString(StartupPower);
             else if (part.vessel.geeForce > startupMaximumGeforce)
-                accumulatedChargeStr = part.vessel.geeForce.ToString("0.000") + "g > " + startupMaximumGeforce + "g";
+                accumulatedChargeStr = part.vessel.geeForce.ToString("F2") + "g > " + startupMaximumGeforce.ToString("F2") + "g";
             else
-                accumulatedChargeStr = String.Empty;
+                accumulatedChargeStr = string.Empty;
 
             accumulatedChargeStrField.guiActive = plasma_ratio < 1;
 
-            electricPowerMaintenance = PluginHelper.getFormattedPowerString(power_consumed) + " / " + PluginHelper.getFormattedPowerString(LaserPowerRequirements);
+            electricPowerMaintenance = PluginHelper.GetFormattedPowerString(_powerConsumed) + " / " + PluginHelper.GetFormattedPowerString(LaserPowerRequirements);
 
             if (startupAnimation != null && !initialized)
             {
@@ -227,7 +207,7 @@ namespace FNPlugin.Reactors
                 }
                 else // Not Enabled
                 {
-                    // continiously start
+                    // continuously start
                     startupAnimation.ToggleAction(new KSPActionParam(KSPActionGroup.Custom01, KSPActionType.Activate));
                     startupAnimation.ToggleAction(new KSPActionParam(KSPActionGroup.Custom01, KSPActionType.Deactivate));
                 }
@@ -247,10 +227,25 @@ namespace FNPlugin.Reactors
 
             UpdateLoopingAnimation(ongoing_consumption_rate * powerPercentage / 100);
 
+            // quit if no fuel available
+            if (stored_fuel_ratio <= 0.01)
+            {
+                plasma_ratio = 0;
+                return;
+            }
+
+            // stop processing if no power needed
+            var laserPowerRequirements = LaserPowerRequirements;
+            if (laserPowerRequirements <= 0)
+            {
+                plasma_ratio = 1;
+                return;
+            }
+
             if (!IsEnabled && !isChargingForJumpstart)
             {
                 plasma_ratio = 0;
-                power_consumed = 0;
+                _powerConsumed = 0;
                 allowJumpStart = false;
                 if (accumulatedElectricChargeInMW > 0)
                     accumulatedElectricChargeInMW -= 0.01 * accumulatedElectricChargeInMW;
@@ -259,34 +254,29 @@ namespace FNPlugin.Reactors
 
             ProcessCharging();
 
-            // quit if no fuel available
-            if (stored_fuel_ratio <= 0.01)
-            {
-                plasma_ratio = 0;
-                return;
-            }
+            var powerRequested = laserPowerRequirements * required_reactor_ratio;
 
-            var powerRequested = LaserPowerRequirements * required_reactor_ratio;
+            double timeWarpFixedDeltaTime = (double)(decimal)Math.Round(TimeWarp.fixedDeltaTime, 7);
 
             double primaryPowerReceived;
             if (!CheatOptions.InfiniteElectricity && powerRequested > 0)
             {
                 primaryPowerReceived = usePowerManagerForPrimaryInputPower
-                    ? consumeFNResourcePerSecondBuffered(powerRequested, primaryInputResource, 0.1)
+                    ? ConsumeFnResourcePerSecondBuffered(powerRequested, primaryInputResource, 0.1)
                     : part.RequestResource(primaryInputResourceDefinition.id, powerRequested * timeWarpFixedDeltaTime, ResourceFlowMode.STAGE_PRIORITY_FLOW) / timeWarpFixedDeltaTime;
             }
             else
                 primaryPowerReceived = powerRequested;
 
             if (maintenancePowerWasteheatRatio > 0)
-                supplyFNResourcePerSecond(maintenancePowerWasteheatRatio * primaryPowerReceived, ResourceManager.FNRESOURCE_WASTEHEAT);
+                SupplyFnResourcePerSecond(maintenancePowerWasteheatRatio * primaryPowerReceived, ResourceSettings.Config.WasteHeatInMegawatt);
 
             // calculate effective primary power ratio
             var powerReceived = primaryPowerReceived;
-            var powerRequirmentMetRatio = powerRequested > 0 ? powerReceived / powerRequested : 1;
+            var powerRequirementMetRatio = powerRequested > 0 ? powerReceived / powerRequested : 1;
 
             // retrieve any shortage from secondary buffer
-            if (secondaryInputMultiplier > 0 && secondaryInputResourceDefinition != null && !CheatOptions.InfiniteElectricity && IsEnabled && powerReceived < powerRequested)
+            if (secondaryInputMultiplier > 0 && secondaryInputResourceDefinition != null && !CheatOptions.InfiniteElectricity && IsEnabled && powerRequirementMetRatio < 1)
             {
                 double currentSecondaryRatio;
                 double currentSecondaryCapacity;
@@ -294,8 +284,8 @@ namespace FNPlugin.Reactors
 
                 if (usePowerManagerForSecondaryInputPower)
                 {
-                    currentSecondaryRatio = getResourceBarRatio(secondaryInputResource);
-                    currentSecondaryCapacity = getTotalResourceCapacity(secondaryInputResource);
+                    currentSecondaryRatio = GetResourceBarRatio(secondaryInputResource);
+                    currentSecondaryCapacity = GetTotalResourceCapacity(secondaryInputResource);
                     currentSecondaryAmount = currentSecondaryCapacity * currentSecondaryRatio;
                 }
                 else
@@ -309,29 +299,29 @@ namespace FNPlugin.Reactors
                 // only use buffer if we have sufficient in storage
                 if (currentSecondaryRatio > secondaryPowerMaxRatio)
                 {
-                    // retreive megawatt ratio
-                    var powerShortage = (1 - powerRequirmentMetRatio) * powerRequested;
+                    // retrieve megawatt ratio
+                    var powerShortage = (1 - powerRequirementMetRatio) * powerRequested;
                     var maxSecondaryConsumption = currentSecondaryAmount - (secondaryPowerMaxRatio * currentSecondaryCapacity);
                     var requestedSecondaryPower = Math.Min(maxSecondaryConsumption, powerShortage * secondaryInputMultiplier * timeWarpFixedDeltaTime);
                     var secondaryPowerReceived = part.RequestResource(secondaryInputResource, requestedSecondaryPower);
                     powerReceived += secondaryPowerReceived / secondaryInputMultiplier / timeWarpFixedDeltaTime;
-                    powerRequirmentMetRatio = powerRequested > 0 ? powerReceived / powerRequested : 1;
+                    powerRequirementMetRatio = powerRequested > 0 ? powerReceived / powerRequested : 1;
                 }
             }
 
             // adjust power to optimal power
-            power_consumed = LaserPowerRequirements * powerRequirmentMetRatio;
+            _powerConsumed = laserPowerRequirements * powerRequirementMetRatio;
 
             // verify if we need startup with accumulated power
-            if (canJumpstart && timeWarpFixedDeltaTime <= 0.1 && accumulatedElectricChargeInMW > 0 && power_consumed < StartupPower && (accumulatedElectricChargeInMW + power_consumed) >= StartupPower)
+            if (canJumpstart && timeWarpFixedDeltaTime <= 0.1 && accumulatedElectricChargeInMW > 0 && _powerConsumed < StartupPower && (accumulatedElectricChargeInMW + _powerConsumed) >= StartupPower)
             {
-                var shortage = StartupPower - power_consumed;
+                var shortage = StartupPower - _powerConsumed;
                 if (shortage <= accumulatedElectricChargeInMW)
                 {
                     //ScreenMessages.PostScreenMessage("Attempting to Jump start", 5.0f, ScreenMessageStyle.LOWER_CENTER);
-                    power_consumed += accumulatedElectricChargeInMW;
+                    _powerConsumed += accumulatedElectricChargeInMW;
                     accumulatedElectricChargeInMW -= shortage;
-                    jumpstartPowerTime = 50;
+                    jumpStartPowerTime = 50;
                 }
             }
 
@@ -340,19 +330,19 @@ namespace FNPlugin.Reactors
                 plasma_ratio = 1;
                 isSwappingFuelMode = false;
             }
-            else if (jumpstartPowerTime > 0)
+            else if (jumpStartPowerTime > 0)
             {
                 plasma_ratio = 1;
-                jumpstartPowerTime--;
+                jumpStartPowerTime--;
             }
-            else if (framesPlasmaRatioIsGood > 0) // maintain reactor
+            else if (_framesPlasmaRatioIsGood > 0) // maintain reactor
             {
-                plasma_ratio = Math.Round(LaserPowerRequirements > 0 ? power_consumed / LaserPowerRequirements : 1, 4);
+                plasma_ratio = Math.Round(laserPowerRequirements > 0 ? _powerConsumed / laserPowerRequirements : 1, 4);
                 allowJumpStart = plasma_ratio >= 1;
             }
             else  // starting reactor
             {
-                plasma_ratio = Math.Round(StartupPower > 0 ? power_consumed / StartupPower : 1, 4);
+                plasma_ratio = Math.Round(StartupPower > 0 ? _powerConsumed / StartupPower : 1, 4);
                 allowJumpStart = plasma_ratio >= 1;
             }
 
@@ -361,17 +351,17 @@ namespace FNPlugin.Reactors
                 plasma_ratio = 1;
                 isChargingForJumpstart = false;
                 IsEnabled = true;
-                if (framesPlasmaRatioIsGood < 100)
-                    framesPlasmaRatioIsGood += 1;
-                if (framesPlasmaRatioIsGood > 10)
+                if (_framesPlasmaRatioIsGood < 100)
+                    _framesPlasmaRatioIsGood += 1;
+                if (_framesPlasmaRatioIsGood > 10)
                     accumulatedElectricChargeInMW = 0;
             }
             else
             {
-                var treshhold = 10 * (1 - plasma_ratio);
-                if (framesPlasmaRatioIsGood >= treshhold)
+                var threshold = 10 * (1 - plasma_ratio);
+                if (_framesPlasmaRatioIsGood >= threshold)
                 {
-                    framesPlasmaRatioIsGood -= treshhold;
+                    _framesPlasmaRatioIsGood -= threshold;
                     plasma_ratio = 1;
                 }
             }
@@ -409,6 +399,7 @@ namespace FNPlugin.Reactors
 
         private void ProcessCharging()
         {
+            double timeWarpFixedDeltaTime = TimeWarp.fixedDeltaTime;
             if (!canJumpstart || !isChargingForJumpstart || !(part.vessel.geeForce < startupMaximumGeforce)) return;
 
             var neededPower = Math.Max(StartupPower - accumulatedElectricChargeInMW, 0);
@@ -416,7 +407,7 @@ namespace FNPlugin.Reactors
             if (neededPower <= 0)
                 return;
 
-            var availableStablePower = getStableResourceSupply(ResourceManager.FNRESOURCE_MEGAJOULES);
+            var availableStablePower = GetStableResourceSupply(ResourceSettings.Config.ElectricPowerInMegawatt);
 
             var minimumChargingPower = startupMinimumChargePercentage * RawPowerOutput;
             if (startupCostGravityMultiplier > 0)
@@ -428,42 +419,42 @@ namespace FNPlugin.Reactors
             if (availableStablePower < minimumChargingPower)
             {
                 if (startupCostGravityMultiplier > 0)
-                    ScreenMessages.PostScreenMessage("Curent you need at least " + minimumChargingPower.ToString("F0") + " MW to charge the reactor. Move closer to gravity well to reduce amount needed", 1f, ScreenMessageStyle.UPPER_CENTER);
+                    ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_KSPIE_InertialConfinementReactor_PostMsg1", minimumChargingPower.ToString("F0")), 1f, ScreenMessageStyle.UPPER_CENTER);//"Curent you need at least " +  + " MW to charge the reactor. Move closer to gravity well to reduce amount needed"
                 else
-                    ScreenMessages.PostScreenMessage("You need at least " + minimumChargingPower.ToString("F0") + " MW to charge the reactor", 5f, ScreenMessageStyle.UPPER_CENTER);
+                    ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_KSPIE_InertialConfinementReactor_PostMsg2", minimumChargingPower.ToString("F0")), 5f, ScreenMessageStyle.UPPER_CENTER);//"You need at least " +  + " MW to charge the reactor"
             }
             else
             {
-                var megaJouleRatio = usePowerManagerForPrimaryInputPower 
-                    ? getResourceBarRatio(primaryInputResource)
+                var megaJouleRatio = usePowerManagerForPrimaryInputPower
+                    ? GetResourceBarRatio(primaryInputResource)
                     : part.GetResourceRatio(primaryInputResource);
 
                 var primaryPowerRequest = Math.Min(neededPower, availableStablePower * megaJouleRatio);
 
-                // verify we amount of power collected exceeds treshhold
+                // verify we amount of power collected exceeds threshold
                 var returnedPrimaryPower = CheatOptions.InfiniteElectricity
                     ? neededPower
                     : usePowerManagerForPrimaryInputPower
-                        ? consumeFNResourcePerSecond(primaryPowerRequest, primaryInputResource)
+                        ? ConsumeFnResourcePerSecond(primaryPowerRequest, primaryInputResource)
                         : part.RequestResource(primaryInputResource, primaryPowerRequest * timeWarpFixedDeltaTime);
 
                 var powerPerSecond = usePowerManagerForPrimaryInputPower ? returnedPrimaryPower : returnedPrimaryPower / timeWarpFixedDeltaTime;
 
                 if (!CheatOptions.IgnoreMaxTemperature && maintenancePowerWasteheatRatio > 0)
-                    supplyFNResourcePerSecond(0.05 * powerPerSecond, ResourceManager.FNRESOURCE_WASTEHEAT);
+                    SupplyFnResourcePerSecond(0.05 * powerPerSecond, ResourceSettings.Config.WasteHeatInMegawatt);
 
                 if (powerPerSecond >= minimumChargingPower)
                     accumulatedElectricChargeInMW += returnedPrimaryPower * timeWarpFixedDeltaTime;
                 else
                 {
                     if (startupCostGravityMultiplier > 0)
-                        ScreenMessages.PostScreenMessage("Curent you need at least " + minimumChargingPower.ToString("F0") + " MW to charge the reactor. Move closer to gravity well to reduce amount needed", 5f, ScreenMessageStyle.UPPER_CENTER);
+                        ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_KSPIE_InertialConfinementReactor_PostMsg1", minimumChargingPower.ToString("F0")), 5f, ScreenMessageStyle.UPPER_CENTER);//"Curent you need at least " +  + " MW to charge the reactor. Move closer to gravity well to reduce amount needed"
                     else
-                        ScreenMessages.PostScreenMessage("You need at least " + minimumChargingPower.ToString("F0") + " MW to charge the reactor", 5f, ScreenMessageStyle.UPPER_CENTER);
+                        ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_KSPIE_InertialConfinementReactor_PostMsg2", minimumChargingPower.ToString("F0")), 5f, ScreenMessageStyle.UPPER_CENTER);//"You need at least " +  + " MW to charge the reactor"
                 }
             }
 
-            // secondry try to charge from secondary Power Storage
+            // secondary try to charge from secondary Power Storage
             neededPower = StartupPower - accumulatedElectricChargeInMW;
             if (secondaryInputMultiplier > 0 && neededPower > 0 && startupMinimumChargePercentage <= 0)
             {
@@ -475,6 +466,12 @@ namespace FNPlugin.Reactors
 
                 accumulatedElectricChargeInMW += secondaryPowerReceived / secondaryInputMultiplier;
             }
+        }
+
+        public override void UpdateEditorPowerOutput()
+        {
+            base.UpdateEditorPowerOutput();
+            electricPowerMaintenance = PluginHelper.GetFormattedPowerString(LaserPowerRequirements) + " / " + PluginHelper.GetFormattedPowerString(LaserPowerRequirements);
         }
     }
 }

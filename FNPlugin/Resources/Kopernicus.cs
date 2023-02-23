@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using UnityEngine;
 
 namespace FNPlugin.Resources
@@ -16,6 +15,34 @@ namespace FNPlugin.Resources
     {
         static List<StarLight> stars;
         static Dictionary<CelestialBody, StarLight> starsByBody;
+
+        public static CelestialBody GetLocalStar(CelestialBody body)
+        {
+            int depth = 0;
+            CelestialBody current = body;
+            while (depth < 10)
+            {
+                if (IsStar(current))
+                    return current;
+
+                current = current.referenceBody;
+                depth++;
+            }
+
+            return null;
+        }
+
+
+        static private double astronomicalUnit;
+        static public double AstronomicalUnit
+        {
+            get
+            {
+                if (astronomicalUnit == 0)
+                    astronomicalUnit = FlightGlobals.GetHomeBody().orbit.semiMajorAxis;
+                return astronomicalUnit;
+            }
+        }
 
         /// <summary>
         /// Retrieves list of Starlight data
@@ -52,8 +79,8 @@ namespace FNPlugin.Resources
                 return starlight.relativeLuminocity;
             else
                 return 0;
-        }       
-        
+        }
+
 
         const string moduleName = "KSPI";
         const double kerbinAU = 13599840256;
@@ -186,7 +213,7 @@ namespace FNPlugin.Resources
             var homePlanetSun = Planetarium.fetch.Sun;
             if (!stars.Any(m => m.star.name == homePlanetSun.name))
             {
-                Debug.LogWarning(debugPrefix + "homeplanet star was not found, adding homeplanet star as default sun");
+                Debug.LogWarning(debugPrefix + "homeplanet localStar was not found, adding homeplanet localStar as default sun");
                 stars.Add(new StarLight() { star = Planetarium.fetch.Sun, relativeLuminocity = 1 });
             }
 

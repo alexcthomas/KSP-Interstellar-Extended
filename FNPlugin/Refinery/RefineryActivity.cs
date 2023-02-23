@@ -1,12 +1,15 @@
-﻿using System;
+﻿using FNPlugin.Constants;
 using UnityEngine;
 
 namespace FNPlugin.Refinery
-{    
-    enum RefineryType { heating = 1, cryogenics = 2, electrolysis = 4, synthesize = 8,  } 
+{
+    public enum RefineryType { None = 0, Heating = 1, Cryogenics = 2, Electrolysis = 4, Synthesize = 8 }
 
-    public abstract class RefineryActivityBase
+    abstract class RefineryActivity: PartModule, IRefineryActivity
     {
+        [KSPField(guiActiveEditor = true, guiName = "Size Multiplier")]
+        public double sizeModifier = 1;
+
         public static int labelWidth = 180;
         public static int valueWidth = 180;
 
@@ -24,7 +27,59 @@ namespace FNPlugin.Refinery
         protected double _current_rate;
         protected double _effectiveMaxPower;
 
-        public double CurrentPower { get { return _current_power; } }
+        private BaseEvent _toggleEvent;
+
+        private InterstellarRefineryController _refineryController;
+
+        public double CurrentPower => _current_power;
+
+        public string ActivityName { get; protected set; }
+        public string Formula { get; protected set; }
+
+        public double PowerRequirements { get; protected set; }
+        public double EnergyPerTon { get; protected set; }
+
+        public virtual RefineryType RefineryType { get; } = RefineryType.None;
+        public virtual string Status { get; } = "";
+
+        [KSPEvent(groupDisplayName = InterstellarRefineryController.GroupTitle, groupName = InterstellarRefineryController.Group, guiActive = false, guiName = "Toggle", active = true)]//Toggle RefineryActivity
+        public void ToggleWindow()
+        {
+            if (_refineryController == null)
+                return;
+
+            _refineryController.ToggleRefinery(this);
+        }
+
+        public abstract void UpdateFrame(double rateMultiplier, double powerFraction, double productionModifier,
+            bool allowOverflow, double fixedDeltaTime, bool isStartup = false);
+
+        public abstract bool HasActivityRequirements();
+
+        public abstract void PrintMissingResources();
+
+        public virtual void Initialize(Part localPart, InterstellarRefineryController controller)
+        {
+            _part = localPart;
+            _vessel = localPart.vessel;
+            _refineryController = controller;
+
+            if (Events != null)
+            {
+                _toggleEvent = Events[nameof(ToggleWindow)];
+                _toggleEvent.guiActive = true;
+            }
+        }
+
+        public override void OnUpdate()
+        {
+            if (_toggleEvent == null || _refineryController == null)
+                return;
+
+            var isActive = _refineryController.IsActive(this);
+
+            _toggleEvent.guiName = (isActive ? "Stop " : "Start ") + ActivityName;
+        }
 
         public virtual void UpdateGUI()
         {
@@ -33,44 +88,44 @@ namespace FNPlugin.Refinery
             if (_value_label == null)
                 _value_label = new GUIStyle(GUI.skin.label) { font = PluginHelper.MainFont };
             if (_value_label_green == null)
-            {
-                _value_label_green = new GUIStyle(GUI.skin.label) { font = PluginHelper.MainFont};
-                _value_label_green.normal.textColor = Color.green;
-            }
+                _value_label_green = new GUIStyle(GUI.skin.label) { font = PluginHelper.MainFont, normal = {textColor = Color.green}};
             if (_value_label_red == null)
-            {
-                _value_label_red = new GUIStyle(GUI.skin.label) { font = PluginHelper.MainFont };
-                _value_label_red.normal.textColor = Color.red;
-            }
+                _value_label_red = new GUIStyle(GUI.skin.label) { font = PluginHelper.MainFont, normal = {textColor = Color.red}};
             if (_value_label_number == null)
                 _value_label_number = new GUIStyle(GUI.skin.label) { font = PluginHelper.MainFont, alignment = TextAnchor.MiddleRight };
         }
-    }
 
-    interface IRefineryActivity
-    {
-        // 1 seperation
-        // 2 desconstrution
-        // 3 construction
+        public override string ToString()
+        {
+            return ActivityName;
+        }
 
-        RefineryType RefineryType { get; }
+        public override string GetInfo()
+        {
+            var sb = StringBuilderCache.Acquire();
+            sb.AppendLine(ActivityName);
 
-        String ActivityName { get; }
+            if (!string.IsNullOrEmpty(Formula))
+                sb.AppendLine(Formula);
 
-        double CurrentPower { get; }
+            double capacity = sizeModifier * PowerRequirements;
+            if (capacity > 0)
+            {
+                sb.Append("Power: ").AppendLine(PluginHelper.GetFormattedPowerString(capacity));
 
-        bool HasActivityRequirements();
+                if (EnergyPerTon > 0.0)
+                {
+                    sb.Append("Energy: ").Append(PluginHelper.GetFormattedPowerString(EnergyPerTon)).AppendLine("/t");
+                    sb.Append("Energy: ").Append((1.0 / EnergyPerTon).ToString("F3")).AppendLine(" t/MW");
 
-        double PowerRequirements { get; }
+                    double production = capacity / EnergyPerTon;
+                    sb.Append("Production: ").Append(production.ToString("F3")).AppendLine(" t/sec");
+                    sb.Append("Production: ").Append((production * 60.0).ToString("F1")).AppendLine(" t/min");
+                    sb.Append("Production: ").Append((production * GameConstants.SECONDS_IN_HOUR).ToString("F0")).AppendLine(" t/hr");
+                }
+            }
 
-        String Status { get; }
-
-        void UpdateFrame(double rateMultiplier, double powerFraction,  double powerModidier, bool allowOverfow, double fixedDeltaTime, bool isStartup = false);
-
-        void UpdateGUI();
-
-        void PrintMissingResources();
-
-        void Initialize(Part part);
+            return sb.ToStringAndRelease();
+        }
     }
 }

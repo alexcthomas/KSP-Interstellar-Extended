@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using FNPlugin.Constants;
 using FNPlugin.Resources;
+using FNPlugin.Science;
 
 namespace FNPlugin.Extensions
 {
@@ -19,7 +21,7 @@ namespace FNPlugin.Extensions
 
         public static double GetBeltAntiparticles(this CelestialBody body, CelestialBody homeworld, double altitude, double lat)
         {
-            if (body.flightGlobalsIndex != 0 && altitude <= PluginHelper.getMaxAtmosphericAltitude(body))  
+            if (body.flightGlobalsIndex != 0 && altitude <= PluginHelper.GetMaxAtmosphericAltitude(body))  
                 return 0;
 
             BeltData beltdata;
@@ -60,7 +62,7 @@ namespace FNPlugin.Extensions
         {
             lat = lat / 180 * Math.PI;
 
-            double atmosphere = FlightGlobals.getStaticPressure(altitude, body) / 101.325;
+            double atmosphere = FlightGlobals.getStaticPressure(altitude, body) / GameConstants.EarthAtmospherePressureAtSeaLevel;
             double relrp = body.Radius / homeworld.Radius;
             double relrt = body.rotationPeriod / homeworld.rotationPeriod;
             double peakbelt = body.GetPeakProtonBeltAltitude(homeworld, altitude, lat);
@@ -93,8 +95,8 @@ namespace FNPlugin.Extensions
         public static double GetElectronRadiationLevel(this CelestialBody body, CelestialBody homeworld, double altitude, double lat)
         {
             lat = lat / 180 * Math.PI;
-            double atmosphere = FlightGlobals.getStaticPressure(altitude, body) / 101.325;
-            double atmosphere_height = PluginHelper.getMaxAtmosphericAltitude(body);
+            double atmosphere = FlightGlobals.getStaticPressure(altitude, body) / GameConstants.EarthAtmospherePressureAtSeaLevel;
+            double atmosphere_height = PluginHelper.GetMaxAtmosphericAltitude(body);
             double atmosphere_scaling = Math.Exp(-atmosphere);
 
             double relrp = body.Radius / homeworld.Radius;

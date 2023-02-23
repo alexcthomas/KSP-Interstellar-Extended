@@ -1,36 +1,46 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using FNPlugin.Resources;
 
-namespace FNPlugin.Wasteheat 
+namespace FNPlugin.Wasteheat
 {
-    class FNWasteheatExplode : PartModule 
+    class FNWasteheatExplode : PartModule
     {
-        [KSPField]
-        public double explodeFrame = 30;
-        [KSPField]
-        public double explodeRatio = 1;
-        
+        [KSPField] public bool activeOnlyWhenActivated = true;
+        [KSPField] public double explodeFrame = 25;    // half a second
+        [KSPField] public double explodeRatio = 1;
 
-        private int explode_counter;
+        [KSPField(guiActiveEditor = true, guiActive = false, guiName = "#LOC_KSPIE_WasteheatExplode_ExplosionPotential")]
+        public float explosionPotential;
 
-        public override void OnStart(PartModule.StartState state)
+        private int _explodeCounter;
+
+        public override void OnStart(StartState state)
         {
+            if (explosionPotential <= 0)
+                explosionPotential = part.explosionPotential;
+        }
+
+        public void FixedUpdate()
+        {
+            if (HighLogic.LoadedSceneIsEditor) return;
+
+            if (!enabled && activeOnlyWhenActivated == false)
+                base.OnFixedUpdate();
         }
 
         public override void OnFixedUpdate() // OnFixedUpdate is only called when (force) activated
         {
-            var wasteheatResource = part.Resources["WasteHeat"];
+            var wasteheatResource = part.Resources[ResourceSettings.Config.WasteHeatInMegawatt];
 
             if (!CheatOptions.IgnoreMaxTemperature && wasteheatResource != null && wasteheatResource.amount >= wasteheatResource.maxAmount * explodeRatio)
             {
-                explode_counter++;
-                if (explode_counter > explodeFrame)
-                    part.explode();
+                _explodeCounter++;
+                if (_explodeCounter < explodeFrame) return;
+
+                part.explosionPotential = explosionPotential;
+                part.explode();
             }
             else
-                explode_counter = 0;
+                _explodeCounter = 0;
         }
     }
 }

@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>FNPlugin</RootNamespace>
     <AssemblyName>Interstellar</AssemblyName>
-    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProductVersion>12.0.0</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
@@ -29,6 +29,8 @@
     <OutputPath>bin\Release\</OutputPath>
     <Prefer32Bit>false</Prefer32Bit>
     <Optimize>true</Optimize>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="999_Scale_Redist">
@@ -67,9 +69,6 @@
     <Reference Include="UnityEngine.InputLegacyModule">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Kerbal Space Program\KSP_x64_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
     </Reference>
-    <Reference Include="UnityEngine.Networking">
-      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Kerbal Space Program\KSP_x64_Data\Managed\UnityEngine.Networking.dll</HintPath>
-    </Reference>
     <Reference Include="UnityEngine.PhysicsModule">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Kerbal Space Program\KSP_x64_Data\Managed\UnityEngine.PhysicsModule.dll</HintPath>
     </Reference>
@@ -88,23 +87,41 @@
     <Compile Include="Animate\FNLightSwitch.cs" />
     <Compile Include="Beamedpower\BeamedPowerTransmitterTag.cs" />
     <Compile Include="Beamedpower\InterstellarBeamedPowerHelper.cs" />
-    <Compile Include="Collectors\RegolithCollector.cs" />
-    <Compile Include="Collectors\SolarWindCollector.cs" />
-    <Compile Include="Collectors\UniversalCrustExtractor.cs" />
+    <Compile Include="GameEventSubscriber.cs" />
+    <Compile Include="PluginSettings.cs" />
+    <Compile Include="Powermanagement\Interfaces\IFNElectricPowerGeneratorSource.cs" />
+    <Compile Include="Reactors\IFNNuclearFuelReprocessable.cs" />
+    <Compile Include="Refinery\FNResourceGenerator.cs" />
+    <Compile Include="Resources\MetallicHydrogenFactory.cs" />
+    <Compile Include="Resources\ProcessControlMetaData.cs" />
+    <Compile Include="Resources\RegolithCollector.cs" />
+    <Compile Include="Resources\SolarWindCollector.cs" />
+    <Compile Include="Resources\UniversalCrustExtractor.cs" />
     <Compile Include="Extensions\Approximate.cs" />
+    <Compile Include="Extensions\BoolExtensions.cs" />
     <Compile Include="Extensions\Decimal.cs" />
     <Compile Include="Extensions\DoubleExtensions.cs" />
     <Compile Include="Extensions\VesselExtension.cs" />
     <Compile Include="External\FNEmitterController.cs" />
     <Compile Include="HideHiddenPartsFilter.cs" />
     <Compile Include="External\Kerbalism.cs" />
+    <Compile Include="Powermanagement\DefaultResourceManager.cs" />
+    <Compile Include="Powermanagement\PowerDistribution.cs" />
+    <Compile Include="Powermanagement\ThermalPowerResourceManager.cs" />
     <Compile Include="Powermanagement\FNBatteryGenerator.cs" />
     <Compile Include="Powermanagement\FNGeneratorAdapterVariable.cs" />
-    <Compile Include="Powermanagement\IFNChargedParticleSource.cs" />
-    <Compile Include="Powermanagement\IFNPowerSource.cs" />
+    <Compile Include="Powermanagement\Interfaces\IFNChargedParticleSource.cs" />
+    <Compile Include="Powermanagement\Interfaces\IFNPowerSource.cs" />
+    <Compile Include="Powermanagement\KspiSuperCapacitator.cs" />
+    <Compile Include="Powermanagement\MegajoulesResourceManager.cs" />
+    <Compile Include="Powermanagement\ChargedPowerResourceManager.cs" />
+    <Compile Include="Powermanagement\WasteHeatResourceManager.cs" />
+    <Compile Include="Propulsion\FNPersistentRotation.cs" />
+    <Compile Include="Propulsion\FNSimpleEngineIgnatorFX.cs" />
     <Compile Include="Propulsion\IFNEngineNoozle.cs" />
     <Compile Include="Propulsion\ThermalEngineFuel.cs" />
     <Compile Include="RDColoredUpgradeIcon.cs" />
+    <Compile Include="Refinery\IRefineryActivity.cs" />
     <Compile Include="Resources\CrustalResource.cs" />
     <Compile Include="Resources\CrustalResourceHandler.cs" />
     <Compile Include="Resources\Kopernicus.cs" />
@@ -123,9 +140,9 @@
     <Compile Include="IUpgradeableModule.cs" />
     <Compile Include="Powermanagement\ResourceManager.cs" />
     <Compile Include="Powermanagement\ResourceOvermanager.cs" />
-    <Compile Include="Powermanagement\IResourceSuppliable.cs" />
+    <Compile Include="Powermanagement\Interfaces\IResourceSuppliable.cs" />
     <Compile Include="Powermanagement\ResourceSuppliableModule.cs" />
-    <Compile Include="Powermanagement\IResourceSupplier.cs" />
+    <Compile Include="Powermanagement\Interfaces\IResourceSupplier.cs" />
     <Compile Include="Powermanagement\SupplyPriorityManager.cs" />
     <Compile Include="Propulsion\AlcubierreDrive.cs" />
     <Compile Include="Propulsion\EngineECU2.cs" />
@@ -134,37 +151,36 @@
     <Compile Include="Propulsion\ModuleEnginesWarp.cs" />
     <Compile Include="Depricated\FNModuleRCSFX.cs" />
     <Compile Include="Depricated\FNRCSSounds.cs" />
-    <Compile Include="Propulsion\ThermalPowerTransport.cs" />
+    <Compile Include="Reactors\ThermalPowerTransport.cs" />
     <Compile Include="Propulsion\VistaECU2.cs" />
-    <Compile Include="Propulsion\VistaEngineControllerAdvanced.cs" />
     <Compile Include="Propulsion\DeadalusEngineController.cs" />
-    <Compile Include="Propulsion\VistaEngineControllerAdvanced2.cs" />
     <Compile Include="Reactors\InterstellarFissionDP.cs" />
     <Compile Include="Reactors\InterstellarFissionPB.cs" />
-    <Compile Include="Refinery\AluminiumElectrolyser.cs" />
-    <Compile Include="Collectors\AntimatterCollector.cs" />
-    <Compile Include="Refinery\AntimatterFactory.cs" />
-    <Compile Include="Refinery\AtmosphericExtractor.cs" />
+    <Compile Include="Refinery\Activity\AluminiumElectrolyzer.cs" />
+    <Compile Include="Resources\AntimatterCollector.cs" />
+    <Compile Include="Resources\AntimatterFactory.cs" />
+    <Compile Include="Refinery\Activity\AtmosphereProcessor.cs" />
     <Compile Include="Refinery\RefineryActivity.cs" />
-    <Compile Include="Refinery\PartialOxidationMethane.cs" />
+    <Compile Include="Refinery\Activity\PartialMethaneOxidation.cs" />
     <Compile Include="Powermanagement\InterstellarPowerSupply.cs" />
-    <Compile Include="Refinery\RegolithProcessor.cs" />
-    <Compile Include="Refinery\SeawaterExtractor.cs" />
-    <Compile Include="Refinery\SolarWindProcessor.cs" />
+    <Compile Include="Refinery\Activity\RegolithProcessor.cs" />
+    <Compile Include="Refinery\Activity\OceanProcessor.cs" />
+    <Compile Include="Refinery\Activity\SolarWindProcessor.cs" />
     <Compile Include="Refinery\AntimatterGenerator.cs" />
-    <Compile Include="Collectors\AtmosphericIntake.cs" />
-    <Compile Include="Refinery\AnthraquinoneProcessor.cs" />
-    <Compile Include="Refinery\AmmoniaElectrolyzer.cs" />
+    <Compile Include="Resources\AtmosphericIntake.cs" />
+    <Compile Include="Refinery\Activity\AnthraquinoneProcessor.cs" />
+    <Compile Include="Refinery\Activity\AmmoniaElectrolyzer.cs" />
     <Compile Include="Propulsion\ThermalNozzleController.cs" />
     <Compile Include="Propulsion\InterstellarMagneticNozzleControllerFX.cs" />
-    <Compile Include="Refinery\MethanePyrolysis.cs" />
-    <Compile Include="Refinery\ReverseWaterGasShift.cs" />
-    <Compile Include="Refinery\HeavyWaterElectroliser.cs" />
-    <Compile Include="Refinery\WaterGasShift.cs" />
-    <Compile Include="Refinery\CarbonDioxideElectroliser.cs" />
+    <Compile Include="Refinery\Activity\MethanePyrolysis.cs" />
+    <Compile Include="Refinery\Activity\ReverseWaterGasShift.cs" />
+    <Compile Include="Refinery\Activity\HeavyWaterElectrolyzer.cs" />
+    <Compile Include="Refinery\Activity\WaterGasShift.cs" />
+    <Compile Include="Refinery\Activity\CarbonDioxideElectrolyzer.cs" />
+    <Compile Include="Science\FNSunModuleScienceExperiment.cs" />
     <Compile Include="Science\InterstellarResourceScienceModule.cs" />
-    <Compile Include="Refinery\HaberProcess.cs" />
-    <Compile Include="Refinery\PeroxideProcess.cs" />
+    <Compile Include="Refinery\Activity\HaberProcess.cs" />
+    <Compile Include="Refinery\Activity\PeroxideProcess.cs" />
     <Compile Include="Reactors\InterstellarCatalysedFissionFusion.cs" />
     <Compile Include="Extensions\CelestialBodyExtensions.cs" />
     <Compile Include="Reactors\InterstellarFissionMSRGC.cs" />
@@ -174,57 +190,57 @@
     <Compile Include="Propulsion\ElectricEnginePropellant.cs" />
     <Compile Include="Propulsion\ElectricRCSController.cs" />
     <Compile Include="External\FNHabitat.cs" />
-    <Compile Include="Storage\FNModuleAnimater.cs" />
+    <Compile Include="Science\FNModuleReactionWheelController.cs" />
+    <Compile Include="Storage\FNModuleAnimator.cs" />
     <Compile Include="Storage\FNRadioActiveStorage.cs" />
+    <Compile Include="Storage\FNResourceTransfer.cs" />
     <Compile Include="Storage\KerbalismHabitatController.cs" />
-    <Compile Include="Toolbar\FlightUIStarter.cs" />
+    <Compile Include="Powermanagement\FlightUIStarter.cs" />
     <Compile Include="Science\FNImpactorModule.cs" />
     <Compile Include="Science\FNLCMassSpectrometer.cs" />
     <Compile Include="Science\FNMassSpectrometer.cs" />
     <Compile Include="Storage\FNModuleCryostat.cs" />
-    <Compile Include="Wasteheat\FNFissionGeneratorAdapter.cs" />
-    <Compile Include="Wasteheat\FNModulePreecooler.cs" />
+    <Compile Include="Powermanagement\FNFissionGeneratorAdapter.cs" />
+    <Compile Include="Wasteheat\FNModulePrecooler.cs" />
     <Compile Include="Science\DTMagnetometer.cs" />
     <Compile Include="Reactors\FNAntimatterReactor.cs" />
     <Compile Include="Science\FNSeismicProbe.cs" />
-    <Compile Include="Reactors\FNThermalHeatExchanger.cs" />
+    <Compile Include="Powermanagement\FNThermalPowerGenerator.cs" />
     <Compile Include="Refinery\InterstellarRefinery.cs" />
-    <Compile Include="InterstellarResourcesConfiguration.cs" />
+    <Compile Include="Resources\ResourceSettings.cs" />
     <Compile Include="Science\InterstellarTelescope.cs" />
     <Compile Include="Science\ITelescopeController.cs" />
-    <Compile Include="Refinery\NuclearFuelReprocessor.cs" />
+    <Compile Include="Refinery\Activity\NuclearFuelReprocessor.cs" />
     <Compile Include="Reactors\InterstellarReactor.cs" />
     <Compile Include="Reactors\InterstellarTokomakFusionReator.cs" />
-    <Compile Include="Collectors\ISRUScoop.cs" />
     <Compile Include="Beamedpower\BeamedPowerReceiver.cs" />
     <Compile Include="Beamedpower\MicrowavePowerTransmitter.cs" />
     <Compile Include="Science\ModableExperimentResultDialogPage.cs" />
     <Compile Include="Science\ModuleModableScienceGenerator.cs" />
-    <Compile Include="Storage\ModuleElementRadioactiveDecay.cs" />
+    <Compile Include="Storage\FNRadioactiveDecay.cs" />
     <Compile Include="Propulsion\ModuleSabreHeating.cs" />
     <Compile Include="PluginHelper.cs" />
     <Compile Include="Reactors\ReactorFuel.cs" />
     <Compile Include="Reactors\ReactorFuelMode.cs" />
-    <Compile Include="Refinery\SabatierReactor.cs" />
+    <Compile Include="Refinery\Activity\SabatierReactor.cs" />
     <Compile Include="Science\ScienceModule.cs" />
-    <Compile Include="Refinery\UF4Ammonolysiser.cs" />
-    <Compile Include="Toolbar\VABThermalUI.cs" />
+    <Compile Include="Refinery\Activity\UF4Ammonolysiser.cs" />
+    <Compile Include="Wasteheat\VABThermalUI.cs" />
     <Compile Include="Science\VanAllen.cs" />
     <Compile Include="Powermanagement\FNGenerator.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Science\ComputerCore.cs" />
-    <Compile Include="Propulsion\InterstellarRCSModule.cs" />
-    <Compile Include="Propulsion\VistaEngineController.cs" />
     <Compile Include="Wasteheat\FNRadiator.cs" />
     <Compile Include="Powermanagement\FNGeneratorAdapter.cs" />
     <Compile Include="Wasteheat\FNSolarPanelWasteHeatModule.cs" />
     <Compile Include="Storage\AntimatterStorageTank.cs" />
-    <Compile Include="Propulsion\ModuleSolarSail.cs" />
-    <Compile Include="Refinery\WaterElectroliser.cs" />
+    <Compile Include="Refinery\Activity\WaterElectrolyzer.cs" />
+    <Compile Include="Wasteheat\FNPassiveThermalDissipation.cs" />
     <Compile Include="Wasteheat\FNWasteheatBuffer.cs" />
     <Compile Include="Wasteheat\FNWasteheatExplode.cs" />
     <Compile Include="Wasteheat\RadiatorManager.cs" />
     <Compile Include="Wasteheat\RadiatorProperties.cs" />
+    <Compile Include="Wasteheat\WasteHeatBufferConfig.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
@@ -243,5 +259,7 @@
       <Name>Interstellar_Redist</Name>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Folder Include="Collectors\" />
+  </ItemGroup>
 </Project>

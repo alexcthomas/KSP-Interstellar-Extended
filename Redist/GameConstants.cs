@@ -1,4 +1,4 @@
-﻿namespace FNPlugin.Constants 
+﻿namespace FNPlugin.Constants
 {
     public class GameConstants
     {
@@ -25,7 +25,7 @@
         public const double deuterium_timescale = 0.0016667;
         public const double baseReprocessingRate = 400;
         public const double baseScienceRate = 0.1;
-        public const double baseUraniumAmmonolysisRate = 0.0002383381;   
+        public const double baseUraniumAmmonolysisRate = 0.0002383381;
         public const double microwave_angle = 3.64773814E-10;
         public const double microwave_dish_efficiency = 0.85;
         public const double microwave_alpha = 0.00399201596806387225548902195609;
@@ -53,6 +53,7 @@
         public const float MaxThermalNozzleIsp = 2997.13f;
         public const double EngineHeatProduction = 1000;
         public const double AirflowHeatMultiplier = 1;
+        public const double ecPerMJ = 1000.0;
 
         public const int KEBRIN_HOURS_DAY = 8;
         public const int SECONDS_IN_HOUR = 3600;

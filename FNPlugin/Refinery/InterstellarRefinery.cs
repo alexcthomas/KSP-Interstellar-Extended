@@ -1,383 +1,368 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using FNPlugin.Constants;
+using FNPlugin.Powermanagement;
+using FNPlugin.Refinery.Activity;
+using FNPlugin.Resources;
+using KSP.Localization;
 using UnityEngine;
 
 namespace FNPlugin.Refinery
 {
+    [KSPModule("Nuclear ISRU Refinery")]
+    class NuclearRefineryController : InterstellarRefineryController { }
+
     [KSPModule("ISRU Refinery")]
-    class InterstellarRefineryController : PartModule
+    public class InterstellarRefineryController : PartModule
     {
-        [KSPField(isPersistant = true, guiActive = false)]
-        protected bool refinery_is_enabled;
-        [KSPField(isPersistant = true, guiActive = false)]
-        protected bool lastOverflowSettings;
-        [KSPField(isPersistant = true, guiActive = false)]
-        protected double lastActiveTime;
-        [KSPField(isPersistant = true, guiActive = false)]
-        protected double lastPowerRatio;
-        [KSPField(isPersistant = true, guiActive = true, guiName = "Current")]
+        public const string Group = "Refinery";
+        public const string GroupTitle = "Refinery";
+
+        // isPersistent
+        [KSPField(isPersistant = true)] protected bool refinery_is_enabled;
+        [KSPField(isPersistant = true)] protected bool lastOverflowSettings;
+        [KSPField(isPersistant = true)] protected double lastActiveTime;
+        [KSPField(isPersistant = true)] protected double lastPowerRatio;
+        [KSPField(isPersistant = true)] protected string lastClassName = "";
+
+        [KSPField(groupDisplayName = GroupTitle, groupName = Group, guiActive = true, isPersistant = true, guiName = "#LOC_KSPIE_Refinery_Current")]//Current
         protected string lastActivityName = "";
-        [KSPField(isPersistant = true, guiActive = false)]
-        protected string lastClassName = "";
-
-        [KSPField(isPersistant = false, guiActive = false, guiActiveEditor = false, guiName = "Refinery Type")]
-        public int refineryType = 255;
-
-        [KSPField(isPersistant = true, guiActive = true, guiName = "Power Control"), UI_FloatRange(stepIncrement = 0.5f, maxValue = 100f, minValue = 0.5f)]
+        [KSPField(groupDisplayName = GroupTitle, groupName = Group, guiActive = true, isPersistant = true, guiName = "#LOC_KSPIE_Refinery_ToggleRefineryWindow"), UI_Toggle(disabledText = "hidden", enabledText = "shown")]
+        public bool showWindow;
+        [KSPField(groupDisplayName = GroupTitle, groupName = Group, guiActive = true, isPersistant = true, guiName = "#LOC_KSPIE_Refinery_PowerControl"), UI_FloatRange(stepIncrement = 0.5f, maxValue = 100f, minValue = 0.5f)]//Power Control
         public float powerPercentage = 100;
 
-        [KSPField(isPersistant = false, guiActive = true, guiName = "Status")]
-        public string status_str = string.Empty;
+        [KSPField(groupDisplayName = GroupTitle, groupName = Group, guiActiveEditor = true, guiName = "#LOC_KSPIE_Refinery_RefineryType")] public int refineryType = 0;
+        [KSPField(groupDisplayName = GroupTitle, groupName = Group, guiActiveEditor = true, guiName = "#LOC_KSPIE_Refinery_ProductionMultiplier", guiFormat = "F3")] public double productionMult = 1;
+        [KSPField(groupDisplayName = GroupTitle, groupName = Group, guiActiveEditor = true, guiName = "#LOC_KSPIE_Refinery_PowerReqMultiplier", guiFormat = "F3")] public double powerReqMult = 1;
+        [KSPField(groupDisplayName = GroupTitle, groupName = Group, guiActiveEditor = true, guiName = "#LOC_KSPIE_Refinery_BaseProduction", guiFormat = "F3")] public double baseProduction = 1;
 
-        [KSPField(isPersistant = false, guiActive = true, guiActiveEditor = true, guiName = "Base Production", guiFormat = "F3")]
-        public double baseProduction = 1;
-        [KSPField(isPersistant = false, guiActive = false, guiActiveEditor = true, guiName = "Production Multiplier", guiFormat = "F3")]
-        public double productionMult = 1;
-        [KSPField(isPersistant = false, guiActive = false, guiActiveEditor = true, guiName = "Power Req Multiplier", guiFormat = "F3")]
-        public double powerReqMult = 1;
+        [KSPField(groupDisplayName = GroupTitle, groupName = Group, guiActive = true, guiName = "#LOC_KSPIE_Refinery_Status")] public string status_str = string.Empty;
+        [KSPField(groupDisplayName = GroupTitle, groupName = Group, guiActive = true, guiName = "#LOC_KSPIE_Refinery_PowerRequirement", guiFormat = "F3", guiUnits = "#LOC_KSPIE_Reactor_megawattUnit")] public double currentPowerReq;
+        [KSPField(groupDisplayName = GroupTitle, groupName = Group, guiActive = true, guiName = "#LOC_KSPIE_Refinery_ConsumedPower", guiFormat = "F3", guiUnits = "#LOC_KSPIE_Reactor_megawattUnit")] public double consumedPowerMW;
+        [KSPField(groupDisplayName = GroupTitle, groupName = Group, guiActive = true, guiName = "#LOC_KSPIE_Refinery_PowerAvailable", guiUnits = "%", guiFormat = "F3")] public double utilisationPercentage;
 
-        [KSPField(isPersistant = false, guiActive = true, guiActiveEditor = false, guiName = "Power Requirement", guiFormat = "F3", guiUnits = " MW")]
-        public double currentPowerReq;
-        [KSPField(isPersistant = false, guiActive = true, guiActiveEditor = false, guiName = "Power Available", guiUnits = "%", guiFormat = "F3")]
-        public double utilisationPercentage;
-        [KSPField(isPersistant = false, guiActive = true, guiActiveEditor = false, guiName = "Consumed Power", guiFormat = "F3", guiUnits = " MW")]
-        public double consumedPowerMW;
-
-        protected IRefineryActivity _current_activity = null;
+        protected IRefineryActivity currentActivity;
         protected IPowerSupply powerSupply;
 
-        private List<IRefineryActivity> _refinery_activities;
-        private Rect _window_position = new Rect(50, 50, RefineryActivityBase.labelWidth * 4, 150);
-        private int _window_ID;
-        private bool _render_window;
-        private GUIStyle _bold_label;
-        private GUIStyle _value_label;
-        private GUIStyle _enabled_button;
-        private GUIStyle _disabled_button;
+        private List<IRefineryActivity> availableRefineries;
+        private Rect _windowPosition = new Rect(50, 50, RefineryActivity.labelWidth * 4, 150);
 
-        /*
+        private GUIStyle _boldLabel;
+        private GUIStyle _valueLabel;
+        private GUIStyle _enabledButton;
+        private GUIStyle _disabledButton;
 
-        [KSPEvent(guiActive = true, guiName = "Test Atmosphere", active = true)]
-        public void SampleAtmosphere()
+        private int _windowId;
+        private bool _overflowAllowed;
+
+        public override void OnLoad(ConfigNode node)
         {
-            CelestialBody celestialBody = vessel.mainBody;
+            base.OnLoad(node);
 
-            AtmosphericResourceHandler.GenerateCompositionFromCelestialBody(celestialBody);
-
-            Debug.Log("[KSPI]: determined " + celestialBody.name + " to be current celestrial body");
-
-            // Lookup homeworld
-            CelestialBody homeworld = FlightGlobals.Bodies.SingleOrDefault(b => b.isHomeWorld);
-
-            Debug.Log("[KSPI]: determined " + homeworld.name + " to be the home world");
-
-            double presureAtSurface = celestialBody.GetPressure(0);
-
-            Debug.Log("[KSPI]: surface presure " + celestialBody.name + " is " + presureAtSurface);
-            Debug.Log("[KSPI]: surface presure " + homeworld.name + " is " + homeworld.GetPressure(0));
-            Debug.Log("[KSPI]: mass " + celestialBody.name + " is " + celestialBody.Mass);
-            Debug.Log("[KSPI]: mass " + homeworld.name + " is " + celestialBody.Mass);
-
-            List<AtmosphericResource> resources = AtmosphericResourceHandler.GetAtmosphericCompositionForBody(part.vessel.mainBody);
-
-            foreach (var resource in resources)
+            var interstellarPowerSupply = part.FindModuleImplementing<InterstellarPowerSupply>();
+            if (interstellarPowerSupply != null)
             {
-                ScreenMessages.PostScreenMessage(resource.DisplayName + " " + resource.ResourceName + " " + resource.ResourceAbundance, 6.0f, ScreenMessageStyle.LOWER_CENTER);
+                interstellarPowerSupply.Fields[nameof(InterstellarPowerSupply.totalPowerSupply)].Attribute.groupName = Group;
+                interstellarPowerSupply.Fields[nameof(InterstellarPowerSupply.totalPowerSupply)].Attribute.groupDisplayName = GroupTitle;
+
+                interstellarPowerSupply.Fields[nameof(InterstellarPowerSupply.displayName)].Attribute.groupName = Group;
+                interstellarPowerSupply.Fields[nameof(InterstellarPowerSupply.displayName)].Attribute.groupDisplayName = GroupTitle;
+
+                interstellarPowerSupply.Fields[nameof(InterstellarPowerSupply.powerPriority)].Attribute.groupName = Group;
+                interstellarPowerSupply.Fields[nameof(InterstellarPowerSupply.powerPriority)].Attribute.groupDisplayName = GroupTitle;
             }
         }
 
-        [KSPEvent(guiActive = true, guiName = "Sample Ocean", active = true)]
-        public void SampleOcean()
-        {
-            List<OceanicResource> resources = OceanicResourceHandler.GetOceanicCompositionForBody(part.vessel.mainBody).ToList();
-
-            foreach (var resource in resources)
-            {
-                PartResourceDefinition definition = PartResourceLibrary.Instance.GetDefinition(resource.ResourceName);
-
-                string found = definition != null ? "D" : "U";
-                ScreenMessages.PostScreenMessage(found + " " + resource.DisplayName + " " + resource.ResourceName + " " + resource.ResourceAbundance, 6.0f, ScreenMessageStyle.LOWER_CENTER);
-            }
-        }
-         * 
-         */
-
-        [KSPEvent(guiActive = true, guiName = "Toggle Refinery Window", active = true)]
-        public void ToggleWindow()
-        {
-            _render_window = !_render_window;
-
-            if (_render_window && _refinery_activities.Count == 1)
-                _current_activity = _refinery_activities.First();
-        }
-
-        public override void OnStart(PartModule.StartState state)
+        public override void OnStart(StartState state)
         {
             powerSupply = part.FindModuleImplementing<IPowerSupply>();
 
             if (powerSupply != null)
-                powerSupply.DisplayName = "started";
+                powerSupply.DisplayName = Localizer.Format("#LOC_KSPIE_Refinery_started"); //"started"
 
             if (state == StartState.Editor) return;
 
             // load stored overflow setting
-            overflowAllowed = lastOverflowSettings;
+            _overflowAllowed = lastOverflowSettings;
 
-            _window_ID = new System.Random(part.GetInstanceID()).Next(int.MinValue, int.MaxValue);
+            _windowId = new System.Random(part.GetInstanceID()).Next(int.MinValue, int.MaxValue);
 
-            _refinery_activities = part.FindModulesImplementing<IRefineryActivity>();
-            if (_refinery_activities == null || _refinery_activities.Count == 0)
+            var refineriesList = part.FindModulesImplementing<IRefineryActivity>().ToList();
+
+            if (refineryType > 0)
             {
-                var unsortedList = new List<IRefineryActivity>();
+                AddIfMissing(refineriesList, new AluminiumElectrolyzer());
+                AddIfMissing(refineriesList, new AmmoniaElectrolyzer());
+                AddIfMissing(refineriesList, new AnthraquinoneProcessor());
+                AddIfMissing(refineriesList, new AtmosphereProcessor());
+                AddIfMissing(refineriesList, new CarbonDioxideElectrolyzer());
+                AddIfMissing(refineriesList, new HaberProcess());
+                AddIfMissing(refineriesList, new HeavyWaterElectrolyzer());
+                AddIfMissing(refineriesList, new PartialMethaneOxidation());
+                AddIfMissing(refineriesList, new PeroxideProcess());
+                AddIfMissing(refineriesList, new UF4Ammonolysiser());
+                AddIfMissing(refineriesList, new RegolithProcessor());
+                AddIfMissing(refineriesList, new ReverseWaterGasShift());
+                AddIfMissing(refineriesList, new NuclearFuelReprocessor());
+                AddIfMissing(refineriesList, new SabatierReactor());
+                AddIfMissing(refineriesList, new OceanProcessor());
+                AddIfMissing(refineriesList, new SolarWindProcessor());
+                AddIfMissing(refineriesList, new WaterElectrolyzer());
+                AddIfMissing(refineriesList, new WaterGasShift());
 
-                    unsortedList.Add(new AnthraquinoneProcessor());
-                    unsortedList.Add(new NuclearFuelReprocessor());
-                    unsortedList.Add(new AluminiumElectrolyser());
-                    unsortedList.Add(new SabatierReactor());
-                    unsortedList.Add(new WaterElectroliser());
-                    unsortedList.Add(new HeavyWaterElectroliser());
-                    unsortedList.Add(new PeroxideProcess());
-                    unsortedList.Add(new UF4Ammonolysiser());
-                    unsortedList.Add(new HaberProcess());
-                    unsortedList.Add(new AmmoniaElectrolyzer());
-                    unsortedList.Add(new CarbonDioxideElectroliser());
-                    unsortedList.Add(new WaterGasShift());
-                    unsortedList.Add(new ReverseWaterGasShift());
-                    unsortedList.Add(new PartialOxidationMethane());
-                    unsortedList.Add(new SolarWindProcessor());
-                    unsortedList.Add(new RegolithProcessor());
-                    unsortedList.Add(new AtmosphericExtractor());
-                    unsortedList.Add(new SeawaterExtractor());
-
-                _refinery_activities = unsortedList.Where(m => ((int)m.RefineryType & this.refineryType) == (int)m.RefineryType).OrderBy(a => a.ActivityName).ToList();
+                availableRefineries = refineriesList
+                    .Where(m => ((int) m.RefineryType & refineryType) == (int) m.RefineryType)
+                    .OrderBy(a => a.ActivityName).ToList();
             }
+            else
+                availableRefineries = refineriesList.OrderBy(a => a.ActivityName).ToList();
 
-            _refinery_activities.ForEach(m => m.Initialize(this.part));
-
-            // load same 
-            if (refinery_is_enabled && !string.IsNullOrEmpty(lastActivityName))
+            // initialize refineries
+            foreach (var availableRefinery in availableRefineries)
             {
-                Debug.Log("[KSPI]: ISRU Refinery looking to restart " + lastActivityName);
-                _current_activity = _refinery_activities.FirstOrDefault(a => a.ActivityName == lastActivityName);
-
-                if (_current_activity == null)
+                try
                 {
-                    Debug.Log("[KSPI]: ISRU Refinery looking to restart " + lastClassName);
-                    _current_activity = _refinery_activities.FirstOrDefault(a => a.GetType().Name == lastClassName);
+                    availableRefinery.Initialize(part, this);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError("[KSPI]: Failed to initialize " + availableRefinery.ActivityName + " with exception: " + e.Message);
                 }
             }
 
-            if (_current_activity != null)
+            // load same
+            if (refinery_is_enabled && !string.IsNullOrEmpty(lastActivityName))
             {
-                bool hasRequirement =_current_activity.HasActivityRequirements();
-                lastActivityName = _current_activity.ActivityName;
+                Debug.Log("[KSPI]: ISRU Refinery looking to restart " + lastActivityName);
+                currentActivity = availableRefineries.FirstOrDefault(a => a.ActivityName == lastActivityName);
+
+                if (currentActivity == null)
+                {
+                    Debug.Log("[KSPI]: ISRU Refinery looking to restart " + lastClassName);
+                    currentActivity = availableRefineries.FirstOrDefault(a => a.GetType().Name == lastClassName);
+                }
+            }
+
+            if (currentActivity != null)
+            {
+                bool hasRequirement = currentActivity.HasActivityRequirements();
+                lastActivityName = currentActivity.ActivityName;
 
                 Debug.Log("[KSPI]: ISRU Refinery initializing " + lastActivityName + " for which hasRequirement: " + hasRequirement);
-
-                var productionModifier = productionMult * baseProduction;
 
                 var timeDifference = (Planetarium.GetUniversalTime() - lastActiveTime);
 
                 if (timeDifference > 0.01)
                 {
-                    string message = "IRSU performed " + lastActivityName + " for " + timeDifference.ToString("0") + " seconds";
-                    Debug.Log("[KSPI]: "  + message);
+                    string message = Localizer.Format("#LOC_KSPIE_Refinery_Postmsg1", lastActivityName, timeDifference.ToString("0")); //"IRSU performed " +  + " for " +  + " seconds"
+                    Debug.Log("[KSPI]: " + message);
                     ScreenMessages.PostScreenMessage(message, 20, ScreenMessageStyle.LOWER_CENTER);
                 }
 
+                var productionModifier = productionMult * baseProduction;
                 if (lastActivityName == "Atmospheric Extraction")
-                    ((AtmosphericExtractor)_current_activity).ExtractAir(lastPowerRatio * productionModifier, lastPowerRatio, productionModifier, lastOverflowSettings, timeDifference, true);
+                    ((AtmosphereProcessor) currentActivity).ExtractAir(lastPowerRatio * productionModifier,
+                        lastPowerRatio, productionModifier, lastOverflowSettings, timeDifference, true);
                 else if (lastActivityName == "Seawater Extraction")
-                    ((SeawaterExtractor)_current_activity).ExtractSeawater(lastPowerRatio * productionModifier, lastPowerRatio, productionModifier, lastOverflowSettings, timeDifference, true);
+                    ((OceanProcessor) currentActivity).ExtractSeawater(lastPowerRatio * productionModifier,
+                        lastPowerRatio, productionModifier, lastOverflowSettings, timeDifference, true);
                 else
-                    _current_activity.UpdateFrame(lastPowerRatio * productionModifier, lastPowerRatio, productionModifier, lastOverflowSettings, timeDifference, true);
+                    currentActivity.UpdateFrame(lastPowerRatio * productionModifier, lastPowerRatio,
+                        productionModifier, lastOverflowSettings, timeDifference, true);
             }
+        }
 
+        private void AddIfMissing(List<IRefineryActivity> list, IRefineryActivity refinery)
+        {
+            if (list.All(m => m.ActivityName != refinery.ActivityName))
+                list.Add(refinery);
         }
 
         public void Update()
         {
-            try
-            {
-                if (HighLogic.LoadedSceneIsEditor)
-                    return;
+            if (HighLogic.LoadedSceneIsEditor)
+                return;
 
-                if (_current_activity == null)
-                {
-                    powerSupply.DisplayName = part.partInfo.title;
-                    return;
-                }
+            if (powerSupply == null)
+                return;
 
-                powerSupply.DisplayName = part.partInfo.title + " (" + _current_activity.ActivityName + ")";
-            }
-            catch (Exception e)
-            {
-                Debug.LogError("[KSPI]: InterstellarRefineryController Exception " + e.Message);
-            }
+            if (currentActivity == null)
+                powerSupply.DisplayName = part.partInfo.title;
+            else
+                powerSupply.DisplayName = part.partInfo.title + " (" + currentActivity.ActivityName + ")";
         }
 
         public override void OnUpdate()
         {
-            status_str = "Offline";
-
-            if (_current_activity == null) return;
-
-            status_str = _current_activity.Status;
+            status_str = currentActivity == null ? Localizer.Format("#LOC_KSPIE_Refinery_Offline") : currentActivity.Status;
         }
 
         public void FixedUpdate()
         {
             currentPowerReq = 0;
 
-            if (!HighLogic.LoadedSceneIsFlight || !refinery_is_enabled || _current_activity == null)
+            if (!HighLogic.LoadedSceneIsFlight || !refinery_is_enabled || currentActivity == null)
             {
                 lastActivityName = string.Empty;
                 return;
             }
 
-            currentPowerReq = powerReqMult * _current_activity.PowerRequirements * baseProduction;
+            currentPowerReq = powerReqMult * currentActivity.PowerRequirements * baseProduction;
 
-            var powerRequest = currentPowerReq * (powerPercentage / 100);
+            var requestedPowerRatio = powerPercentage / 100;
+
+            var powerRequest = currentPowerReq * requestedPowerRatio;
 
             consumedPowerMW = CheatOptions.InfiniteElectricity
                 ? powerRequest
                 : powerSupply.ConsumeMegajoulesPerSecond(powerRequest);
 
+            var shortage = Math.Max(powerRequest - consumedPowerMW, 0);
 
-            var shortage = Math.Max(currentPowerReq - consumedPowerMW, 0);
+            var fixedDeltaTime = (double)(decimal)Math.Round(TimeWarp.fixedDeltaTime, 7);
 
-            var fixedDeltaTime = (double)(decimal)TimeWarp.fixedDeltaTime;
+            var receivedElectricCharge = part.RequestResource(ResourceSettings.Config.ElectricPowerInKilowatt, shortage *
+                GameConstants.ecPerMJ * fixedDeltaTime) / fixedDeltaTime;
 
-            var recievedElectricCharge = part.RequestResource("ElectricCharge", shortage * 1000 * fixedDeltaTime) / fixedDeltaTime;
+            consumedPowerMW += receivedElectricCharge / GameConstants.ecPerMJ;
 
-            consumedPowerMW += recievedElectricCharge / 1000;
+            var receivedPowerRatio = currentPowerReq > 0 ? consumedPowerMW / currentPowerReq : 0;
 
-            var power_ratio = currentPowerReq > 0 ? consumedPowerMW / currentPowerReq : 0;
-
-            utilisationPercentage = power_ratio * 100;
+            utilisationPercentage = receivedPowerRatio * 100;
 
             var productionModifier = productionMult * baseProduction;
 
-            _current_activity.UpdateFrame(power_ratio * productionModifier, power_ratio, productionModifier, overflowAllowed, fixedDeltaTime);
+            currentActivity.UpdateFrame(requestedPowerRatio * receivedPowerRatio * productionModifier, requestedPowerRatio * receivedPowerRatio, requestedPowerRatio * productionModifier, _overflowAllowed, fixedDeltaTime);
 
-            lastPowerRatio = power_ratio; // save the current power ratio in case the vessel is unloaded
-            lastOverflowSettings = overflowAllowed; // save the current overflow settings in case the vessel is unloaded
-            lastActivityName = _current_activity.ActivityName; // take the string with the name of the current activity, store it in persistent string
-            lastClassName = _current_activity.GetType().Name;
+            lastPowerRatio = receivedPowerRatio; // save the current power ratio in case the vessel is unloaded
+            lastOverflowSettings = _overflowAllowed; // save the current overflow settings in case the vessel is unloaded
+            lastActivityName = currentActivity.ActivityName; // take the string with the name of the current activity, store it in persistent string
+            lastClassName = currentActivity.GetType().Name;
             lastActiveTime = Planetarium.GetUniversalTime();
         }
 
         public override string GetInfo()
         {
-            return "Refinery Module capable of advanced ISRU processing.";
+            return Localizer.Format("#LOC_KSPIE_Refinery_GetInfo");//"Refinery Module capable of advanced ISRU processing."
         }
 
         private void OnGUI()
         {
-            if (this.vessel != FlightGlobals.ActiveVessel || !_render_window) return;
+            if (vessel != FlightGlobals.ActiveVessel || !showWindow) return;
 
-            _window_position = GUILayout.Window(_window_ID, _window_position, Window, "ISRU Refinery Interface");
+            _windowPosition = GUILayout.Window(_windowId, _windowPosition, Window, Localizer.Format("#LOC_KSPIE_Refinery_WindowTitle"));//"ISRU Refinery Interface"
         }
 
-        private bool overflowAllowed;
+        public bool IsActive(IRefineryActivity activity)
+        {
+            return refinery_is_enabled && currentActivity == activity;
+        }
+
+        public void ToggleRefinery(IRefineryActivity activity)
+        {
+            if (refinery_is_enabled)
+            {
+                DeactivateRefinery();
+                return;
+            }
+
+            ActivateRefinery(activity);
+        }
+
+        private void ActivateRefinery(IRefineryActivity activity)
+        {
+            bool hasRequirement = activity.HasActivityRequirements(); // if the requirements for the activity are fulfilled
+
+            if (hasRequirement)
+            {
+                currentActivity = activity; // the activity will be treated as the current activity
+                refinery_is_enabled = true; // refinery is now on
+            }
+            else
+                activity.PrintMissingResources();
+        }
+
+        public void DeactivateRefinery()
+        {
+            refinery_is_enabled = false;
+            currentActivity = null;
+        }
 
         private void Window(int window)
         {
-            if (_bold_label == null)
-            {
-                _bold_label = new GUIStyle(GUI.skin.label);
-                _bold_label.fontStyle = FontStyle.Bold;
-                _bold_label.font = PluginHelper.MainFont;
-            }
+            if (_boldLabel == null)
+                _boldLabel = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, font = PluginHelper.MainFont};
 
-            if (_value_label == null)
-                _value_label = new GUIStyle(GUI.skin.label) { font = PluginHelper.MainFont };
+            if (_valueLabel == null)
+                _valueLabel = new GUIStyle(GUI.skin.label) { font = PluginHelper.MainFont };
 
-            if (_enabled_button == null)
-            {
-                _enabled_button = new GUIStyle(GUI.skin.button);
-                _enabled_button.fontStyle = FontStyle.Bold;
-                _enabled_button.font = PluginHelper.MainFont;
-            }
+            if (_enabledButton == null)
+                _enabledButton = new GUIStyle(GUI.skin.button) { fontStyle = FontStyle.Bold, font = PluginHelper.MainFont };
 
-            if (_disabled_button == null)
-            {
-                _disabled_button = new GUIStyle(GUI.skin.button);
-                _disabled_button.fontStyle = FontStyle.Normal;
-                _disabled_button.font = PluginHelper.MainFont;
-            }
+            if (_disabledButton == null)
+                _disabledButton = new GUIStyle(GUI.skin.button) { fontStyle = FontStyle.Normal, font = PluginHelper.MainFont };
 
-            if (GUI.Button(new Rect(_window_position.width - 20, 2, 18, 18), "x"))
-                _render_window = false;
+            if (GUI.Button(new Rect(_windowPosition.width - 20, 2, 18, 18), "x"))
+                showWindow = false;
 
             GUILayout.BeginVertical();
 
-            if (_current_activity == null || !refinery_is_enabled) // if there is no processing going on or the refinery is not enabled
+            if (currentActivity == null || !refinery_is_enabled) // if there is no processing going on or the refinery is not enabled
             {
-                _refinery_activities.ForEach(act => // per each activity (notice the end brackets are there, 13 lines below)
+                availableRefineries.ForEach(activity => // per each activity (notice the end brackets are there, 13 lines below)
                 {
                     GUILayout.BeginHorizontal();
-                    bool hasRequirement = act.HasActivityRequirements(); // if the requirements for the activity are fulfilled
-                    GUIStyle guistyle = hasRequirement ? _enabled_button : _disabled_button; // either draw the enabled, bold button, or the disabled one
+                    bool hasRequirement = activity.HasActivityRequirements(); // if the requirements for the activity are fulfilled
+                    GUIStyle guiStyle = hasRequirement ? _enabledButton : _disabledButton; // either draw the enabled, bold button, or the disabled one
 
-                    if (GUILayout.Button(act.ActivityName, guistyle, GUILayout.ExpandWidth(true))) // if user clicks the button and has requirements for the activity
-                    {
-                        if (hasRequirement)
-                        {
-                            _current_activity = act; // the activity will be treated as the current activity
-                            refinery_is_enabled = true; // refinery is now on
-                        }
-                        else
-                            act.PrintMissingResources();
+                    var buttonText = string.IsNullOrEmpty(activity.Formula) ? activity.ActivityName : activity.ActivityName + " : " + activity.Formula;
 
-                    }
+                    if (GUILayout.Button(buttonText, guiStyle, GUILayout.ExpandWidth(true))) // if user clicks the button and has requirements for the activity
+                        ToggleRefinery(activity);
                     GUILayout.EndHorizontal();
                 });
             }
             else
             {
-                bool hasRequirement = _current_activity.HasActivityRequirements();
+                bool hasRequirement = currentActivity.HasActivityRequirements();
 
                 // show button to enable/disable resource overflow
                 GUILayout.BeginHorizontal();
-                if (overflowAllowed)
+                if (_overflowAllowed)
                 {
-                    if (GUILayout.Button("Disable Overflow", GUILayout.ExpandWidth(true)))
-                        overflowAllowed = false;
+                    if (GUILayout.Button(Localizer.Format("#LOC_KSPIE_Refinery_DisableOverflow"), GUILayout.ExpandWidth(true)))//"Disable Overflow"
+                        _overflowAllowed = false;
                 }
                 else
                 {
-                    if (GUILayout.Button("Enable Overflow", GUILayout.ExpandWidth(true)))
-                        overflowAllowed = true;
+                    if (GUILayout.Button(Localizer.Format("#LOC_KSPIE_Refinery_EnableOverflow"), GUILayout.ExpandWidth(true)))//"Enable Overflow"
+                        _overflowAllowed = true;
                 }
                 GUILayout.EndHorizontal();
                 GUILayout.BeginHorizontal();
-                GUILayout.Label("Current Activity", _bold_label, GUILayout.Width(RefineryActivityBase.labelWidth));
-                GUILayout.Label(_current_activity.ActivityName, _value_label, GUILayout.Width(RefineryActivityBase.valueWidth * 2));
+                GUILayout.Label(Localizer.Format("#LOC_KSPIE_Refinery_CurrentActivity"), _boldLabel, GUILayout.Width(RefineryActivity.labelWidth));//"Current Activity"
+                GUILayout.Label(currentActivity.ActivityName, _valueLabel, GUILayout.Width(RefineryActivity.valueWidth * 2));
                 GUILayout.EndHorizontal();
                 GUILayout.BeginHorizontal();
-                GUILayout.Label("Status", _bold_label, GUILayout.Width(RefineryActivityBase.labelWidth));
-                GUILayout.Label(_current_activity.Status, _value_label, GUILayout.Width(RefineryActivityBase.valueWidth * 2));
+                GUILayout.Label(Localizer.Format("#LOC_KSPIE_Refinery_Status"), _boldLabel, GUILayout.Width(RefineryActivity.labelWidth));//"Status"
+                GUILayout.Label(currentActivity.Status, _valueLabel, GUILayout.Width(RefineryActivity.valueWidth * 2));
                 GUILayout.EndHorizontal();
 
                 // allow current activity to show feedback
-                _current_activity.UpdateGUI();
+                currentActivity.UpdateGUI();
 
                 GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Deactivate Process", GUILayout.ExpandWidth(true)))
+                if (GUILayout.Button(Localizer.Format("#LOC_KSPIE_Refinery_DeactivateProcess"), GUILayout.ExpandWidth(true)))//"Deactivate Process"
                 {
                     refinery_is_enabled = false;
-                    _current_activity = null;
+                    currentActivity = null;
                 }
                 GUILayout.EndHorizontal();
-
-
             }
             GUILayout.EndVertical();
             GUI.DragWindow();
-
         }
-
     }
 }

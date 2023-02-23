@@ -1,21 +1,22 @@
-﻿using System;
-using System.Linq;
+﻿using KSP.Localization;
+using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Linq;
+using FNPlugin.Resources;
 using UnityEngine;
 
 namespace FNPlugin
 {
     public class FNHabitat : PartModule, IMultipleDragCube
     {
-        private List<IAnimatedModule> _Modules;
-        private bool _hasBeenInitialized = false;
+        private List<IAnimatedModule> modules;
+        private bool _hasBeenInitialized;
 
         private void FindModules()
         {
             if (vessel != null)
             {
-                _Modules = part.FindModulesImplementing<IAnimatedModule>();
+                modules = part.FindModulesImplementing<IAnimatedModule>();
             }
         }
 
@@ -27,7 +28,7 @@ namespace FNPlugin
         public double oxygen = -1;
 
         [KSPField(isPersistant = true)]
-        public bool nitrogenRefiled = false;
+        public bool nitrogenRefiled;
 
         [KSPField]
         public string deployedComfortBonus = "";
@@ -63,14 +64,14 @@ namespace FNPlugin
         public int deployedCrewCapacity = 0;
 
         [KSPField]
-        public string deployAnimationName = "Deploy";
+        public string deployAnimationName = Localizer.Format("#LOC_KSPIE_FNHabitat_Deploy");//"Deploy"
         [KSPField]
-        public string secondaryAnimationName = "Rotate";
+        public string secondaryAnimationName = Localizer.Format("#LOC_KSPIE_FNHabitat_Rotate");//"Rotate"
 
         [KSPField(isPersistant = true)]
         public bool isDeployed = false;
 
-        [KSPField(isPersistant = true, guiName = "Deployed", guiFormat = "P2")]
+        [KSPField(isPersistant = true, guiName = "#LOC_KSPIE_FNHabitat_Deployed", guiFormat = "P2")]//Deployed
         public double partialDeployCostPaid = 0d;
 
         [KSPField(isPersistant = true)]
@@ -178,7 +179,7 @@ namespace FNPlugin
             }
         }
 
-        [KSPEvent(guiName = "Deploy", guiActive = true, externalToEVAOnly = true, guiActiveEditor = true, active = true, guiActiveUnfocused = true, unfocusedRange = 3.0f)]
+        [KSPEvent(guiName = "#LOC_KSPIE_FNHabitat_Deploy", guiActive = true, externalToEVAOnly = true, guiActiveEditor = true, active = true, guiActiveUnfocused = true, unfocusedRange = 3.0f)]//Deploy
         public void DeployModule()
         {
             if (!isDeployed)
@@ -266,15 +267,15 @@ namespace FNPlugin
                     ConsumeResources(resourcesAvailable);
                     partialDeployCostPaid += resourcesAvailable;
                     Fields["partialDeployCostPaid"].guiActive = true;
-                    DisplayMessage("Partially assembling module using: ", resourcesAvailable);
+                    DisplayMessage(Localizer.Format("#LOC_KSPIE_FNHabitat_Msg1") +": ", resourcesAvailable);//Partially assembling module using
                     resourcesNeeded -= resourcesAvailable;
                 }
-                DisplayMessage("Missing resources to assemble module: ", resourcesNeeded);
+                DisplayMessage(Localizer.Format("#LOC_KSPIE_FNHabitat_Msg2") +": ", resourcesNeeded);//Missing resources to assemble module
                 return false;
             }
             else
             {
-                DisplayMessage("Assembling module using: ", resourcesNeeded);
+                DisplayMessage(Localizer.Format("#LOC_KSPIE_FNHabitat_Msg3") +": ", resourcesNeeded);//Assembling module using
                 ConsumeResources(resourcesNeeded);
                 partialDeployCostPaid = 0d;
                 Fields["partialDeployCostPaid"].guiActive = false;
@@ -314,7 +315,7 @@ namespace FNPlugin
 
         //        var warehouse = sourcePart.FindModuleImplementing<USI_ModuleResourceWarehouse>();
 
-        //        if (resInfo.ResourceName != "ElectricCharge" && warehouse != null) //EC we're a lot less picky...
+        //        if (resInfo.ResourceName != ResourceManager.ElectricCharge && warehouse != null) //EC we're a lot less picky...
         //        {
         //            if (!warehouse.localTransferEnabled)
         //                continue;
@@ -374,7 +375,7 @@ namespace FNPlugin
         //    }
         //}
 
-        [KSPEvent(guiName = "Reverse", guiActive = true, externalToEVAOnly = true, guiActiveEditor = false, active = true, guiActiveUnfocused = true, unfocusedRange = 3.0f)]
+        [KSPEvent(guiName = "#LOC_KSPIE_FNHabitat_Reverse", guiActive = true, externalToEVAOnly = true, guiActiveEditor = false, active = true, guiActiveUnfocused = true, unfocusedRange = 3.0f)]//Reverse
         public void ReverseSecondary()
         {
             if (isDeployed && secondaryAnimationName != "")
@@ -386,7 +387,7 @@ namespace FNPlugin
             }
         }
 
-        [KSPEvent(guiName = "Retract", guiActive = true, externalToEVAOnly = true, guiActiveEditor = false,
+        [KSPEvent(guiName = "#LOC_KSPIE_FNHabitat_Retract", guiActive = true, externalToEVAOnly = true, guiActiveEditor = false,//Retract
             active = true, guiActiveUnfocused = true, unfocusedRange = 3.0f)]
         public void RetractModule()
         {
@@ -416,8 +417,8 @@ namespace FNPlugin
             {
                 if (part.protoModuleCrew.Count > 0)
                 {
-                    var msg = string.Format("Unable to deflate {0} as it still contains crew members.",
-                        part.partInfo.title);
+                    var msg = Localizer.Format("#LOC_KSPIE_FNHabitat_Msg4", part.partInfo.title);//string.Format("Unable to deflate {0} as it still contains crew members.",);
+
                     ScreenMessages.PostScreenMessage(msg, 5f, ScreenMessageStyle.UPPER_CENTER);
                     canRetract = false;
                 }
@@ -533,8 +534,7 @@ namespace FNPlugin
                     comfortModule = module;
 
                     comfortBonusField = module.Fields["bonus"];
-                    if (comfortBonusField != null)
-                        comfortBonusField.SetValue(isDeployed ? deployedComfortBonus : undeployedComfortBonus, comfortModule);
+                    comfortBonusField?.SetValue(isDeployed ? deployedComfortBonus : undeployedComfortBonus, comfortModule);
 
                     found = true;
                     break;
@@ -552,8 +552,7 @@ namespace FNPlugin
             if (comfortModule == null)
                 return;
 
-            if (comfortBonusField != null)
-                comfortBonusField.SetValue(isDeployed ? deployedComfortBonus : undeployedComfortBonus, comfortModule);
+            comfortBonusField?.SetValue(isDeployed ? deployedComfortBonus : undeployedComfortBonus, comfortModule);
         }
 
         private void InitializeKerbalismHabitat()
@@ -568,21 +567,19 @@ namespace FNPlugin
                     found = true;
 
                     habitatVolumeField = module.Fields["volume"];
-                    if (habitatVolumeField != null)
-                        habitatVolumeField.SetValue(isDeployed ? deployedHabitatVolume : undeployedHabitatVolume, habitatModule);
+                    habitatVolumeField?.SetValue(isDeployed ? deployedHabitatVolume : undeployedHabitatVolume, habitatModule);
 
                     habitatSurfaceField = module.Fields["surface"];
-                    if (habitatSurfaceField != null)
-                        habitatSurfaceField.SetValue(isDeployed ? deployedHabitatSurface : undeployedHabitatSurface, habitatModule);
+                    habitatSurfaceField?.SetValue(isDeployed ? deployedHabitatSurface : undeployedHabitatSurface, habitatModule);
 
                     break;
                 }
             }
 
-            if (found)
-                UnityEngine.Debug.Log("[KSPI]: Found Habitat PartModule on " + part.partInfo.title);
-            else
-                UnityEngine.Debug.LogWarning("[KSPI]: No Habitat PartModule found on " + part.partInfo.title);
+            //if (found)
+            //    UnityEngine.Debug.Log("[KSPI]: Found Habitat PartModule on " + part.partInfo.title);
+            //else
+            //    UnityEngine.Debug.LogWarning("[KSPI]: No Habitat PartModule found on " + part.partInfo.title);
 
             var foodPartResource = part.Resources["Food"];
             if (foodPartResource != null && food >= 0)
@@ -592,15 +589,15 @@ namespace FNPlugin
                 foodPartResource.amount = ratio * foodPartResource.maxAmount;
             }
 
-            var waterPartResource = part.Resources["Water"];
+            var waterPartResource = part.Resources[ResourceSettings.Config.WaterPure];
             if (waterPartResource != null && water >= 0)
             {
                 var ratio = waterPartResource.amount / waterPartResource.maxAmount;
                 waterPartResource.maxAmount = water;
-                waterPartResource.amount = water * waterPartResource.maxAmount;
+                waterPartResource.amount = ratio * waterPartResource.maxAmount;
             }
 
-            var oxygenPartResource = part.Resources["Oxygen"];
+            var oxygenPartResource = part.Resources[ResourceSettings.Config.OxygenGas];
             if (oxygenPartResource != null && oxygen >= 0)
             {
                 var ratio = oxygenPartResource.amount / oxygenPartResource.maxAmount;
@@ -624,11 +621,9 @@ namespace FNPlugin
             if (habitatModule == null)
                 return;
 
-            if (habitatVolumeField != null)
-                habitatVolumeField.SetValue(isDeployed ? deployedHabitatVolume : undeployedHabitatVolume, habitatModule);
+            habitatVolumeField?.SetValue(isDeployed ? deployedHabitatVolume : undeployedHabitatVolume, habitatModule);
 
-            if (habitatSurfaceField != null)
-                habitatSurfaceField.SetValue(isDeployed ? deployedHabitatSurface : undeployedHabitatSurface, habitatModule);
+            habitatSurfaceField?.SetValue(isDeployed ? deployedHabitatSurface : undeployedHabitatSurface, habitatModule);
         }
 
         private void UpdatemenuNames()
@@ -669,21 +664,21 @@ namespace FNPlugin
 
         private void DisableModules()
         {
-            if (vessel == null || _Modules == null) return;
-            for (int i = 0, iC = _Modules.Count; i < iC; ++i)
+            if (vessel == null || modules == null) return;
+            for (int i = 0, iC = modules.Count; i < iC; ++i)
             {
-                _Modules[i].DisableModule();
+                modules[i].DisableModule();
             }
         }
 
         private void EnableModules()
         {
-            if (vessel == null || _Modules == null)
+            if (vessel == null || modules == null)
                 return;
 
-            for (int i = 0, iC = _Modules.Count; i < iC; ++i)
+            for (int i = 0, iC = modules.Count; i < iC; ++i)
             {
-                var mod = _Modules[i];
+                var mod = modules[i];
                 if (mod.IsSituationValid())
                     mod.EnableModule();
             }
@@ -831,16 +826,18 @@ namespace FNPlugin
 
         public override string GetInfo()
         {
-            if (String.IsNullOrEmpty(ResourceCosts))
+            if (string.IsNullOrEmpty(ResourceCosts))
                 return "";
 
-            var output = new StringBuilder("Resource Cost:\n\n");
+            var output = StringBuilderCache.Acquire();
+            output.Append(Localizer.Format("#LOC_KSPIE_FNHabitat_ResourceCost")).AppendLine(":");//Resource Cost
             var resources = ResourceCosts.Split(',');
             for (int i = 0; i < resources.Length; i += 2)
             {
-                output.Append(string.Format("{0} {1}\n", double.Parse(resources[i + 1]), resources[i]));
+                output.Append(double.Parse(resources[i + 1]).ToString("F1"));
+                output.Append(" ").AppendLine(resources[i]);
             }
-            return output.ToString();
+            return output.ToStringAndRelease();
         }
 
         public string[] GetDragCubeNames()
@@ -853,11 +850,18 @@ namespace FNPlugin
             return false;
         }
 
-        public bool IsMultipleCubesActive { get { return true; } }
+        public bool IsMultipleCubesActive => true;
 
         public void AssumeDragCubePosition(string name)
         {
-            var anim = part.FindModelAnimators(deployAnimationName)[0];
+            var anims = part.FindModelAnimators(deployAnimationName);
+            if (anims == null || anims.Length < 1)
+            {
+                enabled = false;
+                return;
+            }
+
+            var anim = anims[0];
             if (anim == null)
             {
                 enabled = false;
@@ -923,6 +927,3 @@ namespace FNPlugin
         }
     }
 }
-
-
-

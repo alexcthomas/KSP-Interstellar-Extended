@@ -1,118 +1,171 @@
-﻿using FNPlugin.Extensions;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using FNPlugin.Constants;
+using FNPlugin.Extensions;
+using FNPlugin.Resources;
 using UnityEngine;
 
-namespace FNPlugin
+namespace FNPlugin.Powermanagement
 {
-    abstract class ResourceSuppliableModule : PartModule, IResourceSuppliable, IResourceSupplier
+    public abstract class ResourceSuppliableModule : PartModule, IResourceSuppliable, IResourceSupplier
     {
-        [KSPField(isPersistant = false, guiActive = false, guiName = "Update Counter")]
+        [KSPField(isPersistant = true)] public int epx;
+        [KSPField(isPersistant = true)] public int epy;
+        [KSPField(isPersistant = true)] public int whx;
+        [KSPField(isPersistant = true)] public int why;
+        [KSPField(isPersistant = true)] public int tpx;
+        [KSPField(isPersistant = true)] public int tpy;
+        [KSPField(isPersistant = true)] public int cpx;
+        [KSPField(isPersistant = true)] public int cpy;
+
+        [KSPField(isPersistant = false, guiActive = false, guiName = "#LOC_KSPIE_ResourceManager_UpdateCounter")]//Update Counter
         public long updateCounter;
 
+        protected readonly Dictionary<Guid, double> connectedReceivers = new Dictionary<Guid, double>();
+        protected readonly Dictionary<Guid, double> connectedReceiversFraction = new Dictionary<Guid, double>();
+
         protected List<Part> similarParts;
-        protected String[] resources_to_supply;
+        protected string[] resourcesToSupply;
+
+        public Guid Id { get; private set;}
 
         protected int partNrInList;
-        protected double timeWarpFixedDeltaTime;
 
-        private Dictionary<String, double> fnresource_supplied = new Dictionary<String, double>();
+        private readonly Dictionary<string, double> _resourceSupplied = new Dictionary<string, double>();
 
-        public void receiveFNResource(double power, String resourcename)
+        protected void DisableField(string fieldName)
         {
-            if (double.IsNaN(power) || String.IsNullOrEmpty(resourcename)) {
+            var field = Fields[fieldName];
+
+            if (field == null) return;
+            field.guiActive = false;
+            field.guiActiveEditor = false;
+        }
+
+        protected void EnableField(string fieldName)
+        {
+            var field = Fields[fieldName];
+
+            if (field == null) return;
+            field.guiActive = true;
+            field.guiActiveEditor = true;
+        }
+
+        public virtual void AttachThermalReciever(Guid key, double radius)
+        {
+            if (!connectedReceivers.ContainsKey(key))
+                connectedReceivers.Add(key, radius);
+        }
+
+        public virtual void DetachThermalReciever(Guid key)
+        {
+            if (connectedReceivers.ContainsKey(key))
+                connectedReceivers.Remove(key);
+        }
+
+        public virtual double GetFractionThermalReciever(Guid key)
+        {
+            if (connectedReceiversFraction.TryGetValue(key, out var result))
+                return result;
+            else
+                return 0;
+        }
+
+        public void receiveFNResource(double power, string resourceName)
+        {
+            if (double.IsNaN(power) || string.IsNullOrEmpty(resourceName)) {
                 Debug.Log("[KSPI]: receiveFNResource illegal values.");
                 return;
             }
 
-            fnresource_supplied[resourcename] = power;
+            _resourceSupplied[resourceName] = power;
         }
 
-        public double consumeFNResource(double power_fixed, String resourcename, double fixedDeltaTime = 0)
+        public double consumeFNResource(double powerFixed, string resourceName, double fixedDeltaTime = 0)
         {
-            if (power_fixed.IsInfinityOrNaN() || double.IsNaN(fixedDeltaTime) || String.IsNullOrEmpty(resourcename)) 
+            if (powerFixed.IsInfinityOrNaN() || string.IsNullOrEmpty(resourceName))
             {
                 Debug.Log("[KSPI]: consumeFNResource illegal values.");
                 return 0;
             }
 
-            power_fixed = Math.Max(power_fixed, 0);
+            powerFixed = Math.Max(powerFixed, 0);
 
-            var manager = getManagerForVessel(resourcename);
+            var manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            double availablePower;
-            if (!fnresource_supplied.TryGetValue(resourcename, out availablePower))
-                fnresource_supplied[resourcename] = 0;
+            if (!_resourceSupplied.TryGetValue(resourceName, out var availablePower))
+                _resourceSupplied[resourceName] = 0;
 
-            fixedDeltaTime = fixedDeltaTime > 0 ? fixedDeltaTime : (double)(decimal)Math.Round(TimeWarp.fixedDeltaTime, 7);
+            fixedDeltaTime = fixedDeltaTime > 0
+                ? Math.Min(PluginSettings.Config.MaxResourceProcessingTimewarp, fixedDeltaTime)
+                : Math.Min(PluginSettings.Config.MaxResourceProcessingTimewarp, (double)(decimal)TimeWarp.fixedDeltaTime);
 
-            double power_taken_fixed = Math.Max(Math.Min(power_fixed, availablePower * fixedDeltaTime), 0);
+            double powerTakenFixed = Math.Max(Math.Min(powerFixed, availablePower * fixedDeltaTime), 0);
 
-            fnresource_supplied[resourcename] -= (power_taken_fixed / fixedDeltaTime);
-            manager.powerDrawFixed(this, power_fixed, power_taken_fixed);
+            _resourceSupplied[resourceName] -= powerTakenFixed / fixedDeltaTime;
+            manager.PowerDrawFixed(this, powerFixed, powerTakenFixed);
 
-            return power_taken_fixed;
+            return powerTakenFixed;
         }
 
-        public double consumeFNResourcePerSecond(double power_requested_per_second, String resourcename, ResourceManager manager = null)
+        public double ConsumeFnResourcePerSecond(double powerRequestedPerSecond, string resourceName, ResourceManager manager = null)
         {
-            if (power_requested_per_second.IsInfinityOrNaN())
+            if (powerRequestedPerSecond.IsInfinityOrNaN())
             {
                 Debug.Log("[KSPI]: consumeFNResourcePerSecond was called with illegal value");
                 return 0;
             }
 
             if (manager == null)
-                manager = getManagerForVessel(resourcename);
+                manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            double availablePower;
-            if (!fnresource_supplied.TryGetValue(resourcename, out availablePower))
-                fnresource_supplied[resourcename] = 0;
+            if (!_resourceSupplied.TryGetValue(resourceName, out var availablePower))
+                _resourceSupplied[resourceName] = 0;
 
-            power_requested_per_second = Math.Max(power_requested_per_second, 0);
+            powerRequestedPerSecond = Math.Max(powerRequestedPerSecond, 0);
 
-            double power_taken_per_second = Math.Max(Math.Min(power_requested_per_second, availablePower), 0);
-            fnresource_supplied[resourcename] -= power_taken_per_second;
+            double powerTakenPerSecond = Math.Max(Math.Min(powerRequestedPerSecond, availablePower), 0);
+            _resourceSupplied[resourceName] -= powerTakenPerSecond;
 
-            manager.powerDrawPerSecond(this, power_requested_per_second, power_taken_per_second);
+            manager.PowerDrawPerSecond(this, powerRequestedPerSecond, powerTakenPerSecond);
 
-            return power_taken_per_second;
+            return powerTakenPerSecond;
         }
 
-
-        public double consumeFNResourcePerSecond(double power_requested_per_second, double maximum_power_requested_per_second, String resourcename, ResourceManager manager = null)
+        public double ConsumeFnResourcePerSecond(double powerRequestedPerSecond, double maximumPowerRequestedPerSecond, string resourceName, ResourceManager manager = null)
         {
-            if (power_requested_per_second.IsInfinityOrNaN() || maximum_power_requested_per_second.IsInfinityOrNaN())
+            if (powerRequestedPerSecond.IsInfinityOrNaN() || maximumPowerRequestedPerSecond.IsInfinityOrNaN())
             {
                 Debug.Log("[KSPI]: consumeFNResourcePerSecond was called with illegal values");
                 return 0;
             }
 
             if (manager == null)
-                manager = getManagerForVessel(resourcename);
+                manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            double availablePower;
-            if (!fnresource_supplied.TryGetValue(resourcename, out availablePower))
-                fnresource_supplied[resourcename] = 0;
+            if (!_resourceSupplied.TryGetValue(resourceName, out var availablePower))
+                _resourceSupplied[resourceName] = 0;
 
-            var power_taken_per_second = Math.Max(Math.Min(power_requested_per_second, availablePower), 0);
-            fnresource_supplied[resourcename] -= power_taken_per_second;
+            var powerTakenPerSecond = Math.Max(Math.Min(powerRequestedPerSecond, availablePower), 0);
+            _resourceSupplied[resourceName] -= powerTakenPerSecond;
 
-            manager.powerDrawPerSecond(this, power_requested_per_second, Math.Max(maximum_power_requested_per_second, 0), power_taken_per_second);
+            manager.PowerDrawPerSecond(this, powerRequestedPerSecond, Math.Max(maximumPowerRequestedPerSecond, 0), powerTakenPerSecond);
 
-            return power_taken_per_second;
+            return powerTakenPerSecond;
         }
 
-        public double consumeFNResourcePerSecondBuffered(double requestedPowerPerSecond, String resourcename, double limitBarRatio = 0.1, ResourceManager manager = null)
+        public double ConsumeFnResourcePerSecondBuffered(double requestedPowerPerSecond, string resourceName, double limitBarRatio = 0.1, ResourceManager manager = null)
         {
-            if (requestedPowerPerSecond.IsInfinityOrNaN() || String.IsNullOrEmpty(resourcename))
+            double timeWarpFixedDeltaTime = Math.Min(PluginSettings.Config.MaxResourceProcessingTimewarp, (double)(decimal)TimeWarp.fixedDeltaTime);
+
+            if (requestedPowerPerSecond.IsInfinityOrNaN() || string.IsNullOrEmpty(resourceName))
             {
                 Debug.Log("[KSPI]: consumeFNResourcePerSecondBuffered was called with illegal value");
                 return 0;
@@ -121,597 +174,457 @@ namespace FNPlugin
             requestedPowerPerSecond = Math.Max(requestedPowerPerSecond, 0);
 
             if (manager == null)
-                manager = getManagerForVessel(resourcename);
+                manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            double availablePower;
-            if (!fnresource_supplied.TryGetValue(resourcename, out availablePower))
-                fnresource_supplied[resourcename] = 0;
- 
-            var power_taken_per_second = Math.Max(Math.Min(requestedPowerPerSecond, availablePower), 0);
-            fnresource_supplied[resourcename] -= power_taken_per_second;
+            if (!_resourceSupplied.TryGetValue(resourceName, out var availablePower))
+                _resourceSupplied[resourceName] = 0;
+
+            var powerTakenPerSecond = Math.Max(Math.Min(requestedPowerPerSecond, availablePower), 0);
+            _resourceSupplied[resourceName] -= powerTakenPerSecond;
 
             // supplement with buffer power if needed and available
             var powerShortage = requestedPowerPerSecond - availablePower;
             if (powerShortage > 0)
             {
-                var currentCapacity = manager.getTotalResourceCapacity();
-                var currentAmount = currentCapacity * manager.ResourceBarRatioBegin;
+                var currentCapacity = manager.GetTotalResourceCapacity();
+                var currentAmount = currentCapacity * manager.ResourceFillFraction;
                 var fixedPowerShortage = powerShortage * timeWarpFixedDeltaTime;
 
                 if (currentAmount - fixedPowerShortage > currentCapacity * limitBarRatio)
-                    power_taken_per_second += (part.RequestResource(resourcename, fixedPowerShortage) / timeWarpFixedDeltaTime);
+                    powerTakenPerSecond += (part.RequestResource(resourceName, fixedPowerShortage) / timeWarpFixedDeltaTime);
             }
 
-            manager.powerDrawPerSecond(this, requestedPowerPerSecond, power_taken_per_second);
+            manager.PowerDrawPerSecond(this, requestedPowerPerSecond, powerTakenPerSecond);
 
-            return power_taken_per_second;
+            return powerTakenPerSecond;
         }
 
-        public double supplyFNResourceFixed(double supply, String resourcename)
+        protected double ConsumeMegawatts(double requestedPower, bool allowCapacitor = true, bool allowKilowattHour = false, bool allowEc = false, double fixedDeltaTime = 0)
         {
-            if (supply.IsInfinityOrNaN() || String.IsNullOrEmpty(resourcename))
+            if (requestedPower.IsInfinityOrNaN())
+                return 0;
+
+            const double kilowattRatio = GameConstants.ecPerMJ / GameConstants.SECONDS_IN_HOUR;
+            double dt = fixedDeltaTime > 0
+                ? Math.Min(PluginSettings.Config.MaxResourceProcessingTimewarp, fixedDeltaTime)
+                : Math.Min(PluginSettings.Config.MaxResourceProcessingTimewarp, TimeWarp.fixedDeltaTime);
+
+            // First try to consume MJ from ResourceManager
+            double add, result = CheatOptions.InfiniteElectricity ? requestedPower : ConsumeFnResourcePerSecond(requestedPower, ResourceSettings.Config.ElectricPowerInMegawatt);
+            requestedPower -= result;
+
+            // Use MJ from storage such as super capacitors
+            if (requestedPower > 0.0 && allowCapacitor)
             {
-                Debug.LogError("[KSPI]: supplyFNResourceFixed was called with illegal value");
+                add = part.RequestResource(ResourceSettings.Config.ElectricPowerInMegawatt, requestedPower * dt) / dt;
+                result += add;
+                requestedPower -= add;
+            }
+
+            // Use KWH resource from batteries
+            if (requestedPower > 0.0 && allowKilowattHour)
+            {
+                add = part.RequestResource("KilowattHour", requestedPower * kilowattRatio * dt) / (kilowattRatio * dt);
+                result += add;
+                requestedPower -= add;
+            }
+
+            // If still no power, use any electric charge available
+            if (requestedPower > 0.0 && allowEc)
+            {
+                add = part.RequestResource(ResourceSettings.Config.ElectricPowerInKilowatt, requestedPower * GameConstants.ecPerMJ * dt) / (GameConstants.ecPerMJ * dt);
+                result += add;
+            }
+
+            return result;
+        }
+
+        public double SupplyFNResourceFixed(double supply, string resourceName)
+        {
+            if (supply.IsInfinityOrNaN() || string.IsNullOrEmpty(resourceName))
+            {
+                Debug.LogError("[KSPI]: SupplyFNResourceFixed was called with illegal value");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.powerSupplyFixed(this, Math.Max(supply, 0));
+            return manager.PowerSupplyFixed(this, Math.Max(supply, 0));
         }
 
-        public double supplyFNResourcePerSecond(double supply, String resourcename)
+        public double GetRequiredElectricCharge()
         {
-            if (supply.IsInfinityOrNaN() || String.IsNullOrEmpty(resourcename))
+            var manager = (MegajoulesResourceManager)GetManagerForVessel(ResourceSettings.Config.ElectricPowerInMegawatt);
+            if (manager == null)
+                return 0;
+
+            return manager.MjConverted;
+        }
+
+        public double SupplyFnResourcePerSecond(double supply, string resourceName)
+        {
+            if (supply.IsInfinityOrNaN() || string.IsNullOrEmpty(resourceName))
             {
                 Debug.LogError("[KSPI]: supplyFNResourcePerSecond  was called with illegal value");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.powerSupplyPerSecond(this, Math.Max(supply, 0));
+            return manager.PowerSupplyPerSecond(this, Math.Max(supply, 0));
         }
 
-        public double supplyFNResourceFixedWithMax(double supply, double maxsupply, String resourcename)
+        public double SupplyFnResourcePerSecondWithMaxAndEfficiency(double supply, double maxSupply, double efficiencyRatio, string resourceName)
         {
-            if (supply.IsInfinityOrNaN() || maxsupply.IsInfinityOrNaN() || String.IsNullOrEmpty(resourcename))
-            {
-                Debug.LogError("[KSPI]: supplyFNResourceFixedWithMax  was called with illegal value");
-                return 0;
-            }
-
-            ResourceManager manager = getManagerForVessel(resourcename);
-            if (manager == null)
-                return 0;
-
-            return manager.powerSupplyFixedWithMax(this, Math.Max(supply, 0), Math.Max(maxsupply, 0));
-        }
-
-        public double supplyFNResourcePerSecondWithMaxAndEfficiency(double supply, double maxsupply, double efficiencyRatio, String resourcename)
-        {
-            if (supply.IsInfinityOrNaN() || maxsupply.IsInfinityOrNaN() || String.IsNullOrEmpty(resourcename))
+            if (supply.IsInfinityOrNaN() || maxSupply.IsInfinityOrNaN() || string.IsNullOrEmpty(resourceName))
             {
                 Debug.LogError("[KSPI]: supplyFNResourcePerSecondWithMaxAndEfficiency was called with illegal value");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.powerSupplyPerSecondWithMaxAndEfficiency(this, Math.Max(supply, 0), Math.Max(maxsupply, 0), efficiencyRatio);
+            return manager.PowerSupplyPerSecondWithMaxAndEfficiency(this, Math.Max(supply, 0), Math.Max(maxSupply, 0), efficiencyRatio);
         }
 
-        public double supplyFNResourcePerSecondWithMax(double supply, double maxsupply, String resourcename)
+        public double SupplyFnResourcePerSecondWithMax(double supply, double maxSupply, string resourceName)
         {
-            if (supply.IsInfinityOrNaN() || maxsupply.IsInfinityOrNaN() || String.IsNullOrEmpty(resourcename))
+            if (supply.IsInfinityOrNaN() || maxSupply.IsInfinityOrNaN() || string.IsNullOrEmpty(resourceName))
             {
                 Debug.LogError("[KSPI]: supplyFNResourcePerSecondWithMax was called with illegal value");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.powerSupplyPerSecondWithMax(this, Math.Max(supply, 0), Math.Max(maxsupply, 0));
+            return manager.PowerSupplyPerSecondWithMax(this, Math.Max(supply, 0), Math.Max(maxSupply, 0));
         }
 
-        public double supplyManagedFNResourcePerSecond(double supply, String resourcename)
+        public double SupplyManagedFnResourcePerSecond(double supply, string resourceName)
         {
-            if (supply.IsInfinityOrNaN() || String.IsNullOrEmpty(resourcename))
+            if (supply.IsInfinityOrNaN() || string.IsNullOrEmpty(resourceName))
             {
                 Debug.LogError("[KSPI]: supplyManagedFNResourcePerSecond  was called with illegal values.");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.managedPowerSupplyPerSecond(this, Math.Max(supply, 0));
+            return manager.ManagedPowerSupplyPerSecond(this, Math.Max(supply, 0));
         }
 
-        public double getNeededPowerSupplyPerSecondWithMinimumRatio(double supply, double ratio_min, String resourcename, ResourceManager manager = null)
+        public double GetNeededPowerSupplyPerSecondWithMinimumRatio(double supply, double ratioMin, string resourceName, ResourceManager manager = null)
         {
-            if (supply.IsInfinityOrNaN() || ratio_min.IsInfinityOrNaN() || String.IsNullOrEmpty(resourcename))
+            if (supply.IsInfinityOrNaN() || ratioMin.IsInfinityOrNaN() || string.IsNullOrEmpty(resourceName))
             {
                 Debug.LogError("[KSPI]: getNeededPowerSupplyPerSecondWithMinimumRatio was called with illegal values.");
                 return 0;
             }
 
             if (manager == null)
-                manager = getManagerForVessel(resourcename);
+                manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.getNeededPowerSupplyPerSecondWithMinimumRatio(Math.Max(supply, 0), Math.Max(ratio_min, 0));
+            return manager.GetNeededPowerSupplyPerSecondWithMinimumRatio(Math.Max(supply, 0), Math.Max(ratioMin, 0));
         }
 
-        public double supplyManagedFNResourcePerSecondWithMinimumRatio(double supply, double ratio_min, String resourcename, ResourceManager manager = null)
+        public double SupplyManagedFnResourcePerSecondWithMinimumRatio(double supply, double ratioMin, string resourceName, ResourceManager manager = null)
         {
-            if (supply.IsInfinityOrNaN() || ratio_min.IsInfinityOrNaN() || String.IsNullOrEmpty(resourcename))
+            if (supply.IsInfinityOrNaN() || ratioMin.IsInfinityOrNaN() || string.IsNullOrEmpty(resourceName))
             {
                 Debug.LogError("[KSPI]: supplyManagedFNResourcePerSecondWithMinimumRatio illegal values.");
                 return 0;
             }
 
             if (manager == null)
-                manager = getManagerForVessel(resourcename);
+                manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.managedPowerSupplyPerSecondWithMinimumRatio(this, Math.Max(supply, 0), Math.Max(ratio_min, 0));
+            return manager.ManagedPowerSupplyPerSecondWithMinimumRatio(this, Math.Max(supply, 0), Math.Max(ratioMin, 0));
         }
 
-        public double managedProvidedPowerSupplyPerSecondMinimumRatio(double requested_power, double maximum_power, double ratio_min, String resourcename, ResourceManager manager = null)
+        public double ManagedProvidedPowerSupplyPerSecondMinimumRatio(double requestedPower, double maximumPower, double ratioMin, string resourceName, ResourceManager manager = null)
         {
-            if (requested_power.IsInfinityOrNaN()|| maximum_power.IsInfinityOrNaN() || ratio_min.IsInfinityOrNaN() || String.IsNullOrEmpty(resourcename)) 
+            if (requestedPower.IsInfinityOrNaN()|| maximumPower.IsInfinityOrNaN() || ratioMin.IsInfinityOrNaN() || string.IsNullOrEmpty(resourceName))
             {
                 Debug.LogError("[KSPI]: managedProvidedPowerSupplyPerSecondMinimumRatio illegal values.");
                 return 0;
             }
 
             if (manager == null)
-                manager = getManagerForVessel(resourcename);
+                manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            var result = manager.managedRequestedPowerSupplyPerSecondMinimumRatio(this, requested_power, Math.Max(maximum_power, 0), Math.Max(ratio_min, 0));
+            var result = manager.ManagedRequestedPowerSupplyPerSecondMinimumRatio(this, requestedPower, Math.Max(maximumPower, 0), Math.Max(ratioMin, 0));
 
-            return result.currentSupply;
+            return result.CurrentSupply;
         }
 
-        public PowerGenerated managedPowerSupplyPerSecondMinimumRatio(double requested_power, double maximum_power, double ratio_min, String resourcename, ResourceManager manager = null)
+        public PowerGenerated ManagedPowerSupplyPerSecondMinimumRatio(double requestedPower, double maximumPower, double ratioMin, string resourceName, ResourceManager manager = null)
         {
-            if (requested_power.IsInfinityOrNaN() || maximum_power.IsInfinityOrNaN() || ratio_min.IsInfinityOrNaN() || String.IsNullOrEmpty(resourcename)) 
+            if (requestedPower.IsInfinityOrNaN() || maximumPower.IsInfinityOrNaN() || ratioMin.IsInfinityOrNaN() || string.IsNullOrEmpty(resourceName))
             {
                 Debug.LogError("[KSPI]: managedPowerSupplyPerSecondMinimumRatio illegal values.");
                 return null;
             }
 
             if (manager == null)
-                manager = getManagerForVessel(resourcename);
-            if (manager == null)
-                return null;
+                manager = GetManagerForVessel(resourceName);
 
-            return manager.managedRequestedPowerSupplyPerSecondMinimumRatio(this, requested_power, Math.Max(maximum_power, 0), Math.Max(ratio_min, 0));
+            return manager?.ManagedRequestedPowerSupplyPerSecondMinimumRatio(this, requestedPower, Math.Max(maximumPower, 0), Math.Max(ratioMin, 0));
         }
 
-        public double getCurrentResourceDemand(String resourcename)
+        public double GetTotalPowerSupplied(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename)) 
+            if (string.IsNullOrEmpty(resourceName))
             {
-                Debug.LogError("[KSPI]: getCurrentResourceDemand resourcename is null or empty");
+                Debug.LogError("[KSPI]: getTotalPowerSupplied resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
-            if (manager == null)
-                return 0;
-
-            return manager.CurrentResourceDemand;
-        }
-
-        public double getTotalPowerSupplied(String resourcename)
-        {
-            if (String.IsNullOrEmpty(resourcename))
-            {
-                Debug.LogError("[KSPI]: getTotalPowerSupplied resourcename is null or empty");
-                return 0;
-            }
-
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
             return manager.TotalPowerSupplied;
         }
 
-        public double getStableResourceSupply(String resourcename)
+        public double GetStableResourceSupply(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename)) 
+            if (string.IsNullOrEmpty(resourceName))
             {
-                Debug.LogError("[KSPI]: getCurrentResourceDemand resourcename is null or empty");
+                Debug.LogError("[KSPI]: getCurrentResourceDemand resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
             return manager.StableResourceSupply;
         }
 
-        public double getCurrentHighPriorityResourceDemand(String resourcename)
+        public double GetAvailableStableSupply(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename))
+            if (string.IsNullOrEmpty(resourceName))
             {
-                Debug.LogError("[KSPI]: getCurrentHighPriorityResourceDemand resourcename is null or empty");
+                Debug.LogError("[KSPI]: getAvailableResourceSupply resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.CurrentHighPriorityResourceDemand;
+            return Math.Max(manager.StableResourceSupply - manager.ResourceDemandHighPriority, 0);
         }
 
-        public double getAvailableStableSupply(String resourcename)
+        public double GetAvailablePrioritizedStableSupply(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename))
+            if (string.IsNullOrEmpty(resourceName))
             {
-                Debug.LogError("[KSPI]: getAvailableResourceSupply resourcename is null or empty");
+                Debug.LogError("[KSPI]: getAvailablePrioritizedStableSupply resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
-            if (manager == null)
-                return 0;
-
-            return Math.Max(manager.StableResourceSupply - manager.CurrentHighPriorityResourceDemand, 0);
-        }
-
-        public double getAvailablePrioritisedStableSupply(String resourcename)
-        {
-            if (String.IsNullOrEmpty(resourcename)) 
-            {
-                Debug.LogError("[KSPI]: getAvailablePrioritisedStableSupply resourcename is null or empty");
-                return 0;
-            }
-
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
             return Math.Max(manager.StableResourceSupply - manager.GetStablePriorityResourceSupply(getPowerPriority()), 0);
         }
 
-        public double getAvailablePrioritisedCurrentSupply(String resourcename)
+        public double GetAvailablePrioritizedCurrentSupply(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename))
+            if (string.IsNullOrEmpty(resourceName))
             {
-                Debug.LogError("[KSPI]: getAvailablePrioritisedCurrentSupply resourcename is null or empty");
+                Debug.LogError("[KSPI]: getAvailablePrioritizedCurrentSupply resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return Math.Max(manager.CurrentResourceSupply - manager.GetCurrentPriorityResourceSupply(getPowerPriority()), 0);
+            return Math.Max(manager.ResourceSupply - manager.GetCurrentPriorityResourceSupply(getPowerPriority()), 0);
         }
 
-        public double getStablePriorityResourceSupply(String resourcename, int priority)
+        public double GetCurrentResourceSupply(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename))
-            {
-                Debug.LogError("[KSPI]: getAvailableResourceSupply resourcename is null or empty");
+            if (string.IsNullOrEmpty(resourceName)) {
+                Debug.LogError("[KSPI]: getResourceSupply resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
-            if (manager == null)
-                return 0;
-
-            return manager.GetStablePriorityResourceSupply(priority);
-        }
-
-        public double getPriorityResourceSupply(String resourcename)
-        {
-            if (String.IsNullOrEmpty(resourcename))
-            {
-                Debug.LogError("[KSPI]: getAvailableResourceSupply resourcename is null or empty");
-                return 0;
-            }
-
-            ResourceManager manager = getManagerForVessel(resourcename);
-            if (manager == null)
-                return 0;
-
-            return manager.GetStablePriorityResourceSupply(getPowerPriority());
-        }
-
-        public double getAvailableResourceSupply(String resourcename)
-        {
-            if (String.IsNullOrEmpty(resourcename))
-            {
-                Debug.LogError("[KSPI]: getAvailableResourceSupply resourcename is null or empty");
-                return 0;
-            }
-
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
             {
                 //Debug.LogError("[KSPI]: failed to find resource Manager For Current Vessel");
                 return 0;
             }
 
-            return Math.Max(manager.CurrentResourceSupply - manager.CurrentHighPriorityResourceDemand, 0);
+            return manager.ResourceSupply;
         }
 
-        public double getResourceSupply(String resourcename)
+        public double GetCurrentSurplus(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename)) {
-                Debug.LogError("[KSPI]: getResourceSupply resourcename is null or empty");
+            if (string.IsNullOrEmpty(resourceName)) {
+                Debug.LogError("[KSPI]: GetCurrentSurplus resourceName is null or empty");
                 return 0;
             }
-            
-            ResourceManager manager = getManagerForVessel(resourcename);
+
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
             {
                 //Debug.LogError("[KSPI]: failed to find resource Manager For Current Vessel");
                 return 0;
             }
 
-            return manager.CurrentResourceSupply;
+            return manager.CurrentSurplus;
         }
 
-        public double GetOverproduction(String resourcename)
+        public double GetDemandStableSupply(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename)) {
-                Debug.LogError("[KSPI]: GetOverproduction resourcename is null or empty");
+            if (string.IsNullOrEmpty(resourceName)) {
+                Debug.LogError("[KSPI]: getDemandStableSupply resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
-            if (manager == null)
-            {
-                //Debug.LogError("[KSPI]: failed to find resource Manager For Current Vessel");
-                return 0;
-            }
-
-            return manager.getOverproduction();
-        }
-
-        public double getDemandStableSupply(String resourcename)
-        {
-            if (String.IsNullOrEmpty(resourcename)) {
-                Debug.LogError("[KSPI]: getDemandStableSupply resourcename is null or empty");
-                return 0;
-            }
-
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.getDemandStableSupply();
+            return manager.DemandStableSupply;
         }
 
-        public double getResourceDemand(String resourcename)
+        public double GetCurrentUnfilledResourceDemand(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename)) 
+            if (string.IsNullOrEmpty(resourceName))
             {
-                Debug.LogError("[KSPI]: getResourceDemand resourcename is null or empty");
+                Debug.LogError("[KSPI]: GetRequiredResourceDemand resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
-            if (manager == null)
-            {
-                //Debug.LogError("[KSPI]: failed to find resource Manager For Current Vessel");
-                return 0;
-            }
-
-            return manager.ResourceDemand;
-        }
-
-        public double GetRequiredResourceDemand(String resourcename)
-        {
-            if (String.IsNullOrEmpty(resourcename)) 
-            {
-                Debug.LogError("[KSPI]: GetRequiredResourceDemand resourcename is null or empty");
-                return 0;
-            }
-
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.GetRequiredResourceDemand();
+            return manager.CurrentUnfilledResourceDemand;
         }
 
-        public double GetCurrentUnfilledResourceDemand(String resourcename)
+        public double GetResourceBarRatio(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename)) 
+            if (string.IsNullOrEmpty(resourceName))
             {
-                Debug.LogError("[KSPI]: GetRequiredResourceDemand resourcename is null or empty");
+                Debug.LogError("[KSPI]: getResourceBarRatio resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.GetCurrentUnfilledResourceDemand();
+            return manager.ResourceFillFraction;
         }
 
-        public double GetPowerSupply(String resourcename)
+        public double GetResourceBarFraction(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename)) 
+            if (string.IsNullOrEmpty(resourceName))
             {
-                Debug.LogError("[KSPI]: GetPowerSupply resourcename is null or empty");
+                Debug.LogError("[KSPI]: getResourceBarFraction resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.PowerSupply;
+            return manager.ResourceFillFraction;
         }
 
-        public double GetCurrentResourceDemand(String resourcename)
+        public double GetSpareResourceCapacity(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename)) 
+            if (string.IsNullOrEmpty(resourceName))
             {
-                Debug.LogError("[KSPI]: GetCurrentResourceDemand resourcename is null or empty");
+                Debug.LogError("[KSPI]: getSpareResourceCapacity resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.CurrentResourceDemand;
+            return manager.GetSpareResourceCapacity();
         }
 
-        public double getResourceBarRatio(String resourcename)
+        public double GetResourceAvailability(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename)) 
+            if (string.IsNullOrEmpty(resourceName))
             {
-                Debug.LogError("[KSPI]: getResourceBarRatio resourcename is null or empty");
+                Debug.LogError("[KSPI]: getResourceAvailability resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return (double)manager.ResourceBarRatioBegin;
+            return manager.GetResourceAvailability();
         }
 
-        public double getResourceBarFraction(String resourcename)
+        public double GetTotalResourceCapacity(string resourceName)
         {
-            if (String.IsNullOrEmpty(resourcename))
+            if (string.IsNullOrEmpty(resourceName))
             {
-                Debug.LogError("[KSPI]: getResourceBarFraction resourcename is null or empty");
+                Debug.LogError("[KSPI]: getTotalResourceCapacity resourceName is null or empty");
                 return 0;
             }
 
-            ResourceManager manager = getManagerForVessel(resourcename);
+            ResourceManager manager = GetManagerForVessel(resourceName);
             if (manager == null)
                 return 0;
 
-            return manager.ResourceBarRatioBegin;
+            return manager.GetTotalResourceCapacity();
         }
 
-        public double getSqrtResourceBarRatio(String resourcename)
+        public override void OnStart(StartState state)
         {
-            if (String.IsNullOrEmpty(resourcename))
-            {
-                Debug.LogError("[KSPI]: getResourceBarRatio resourcename is null or empty");
-                return 0;
-            }
+            Id = Guid.NewGuid();
 
-            ResourceManager manager = getManagerForVessel(resourcename);
-            if (manager == null)
-                return 0;
-
-            return manager.SqrtResourceBarRatioBegin;
-        }
-
-        public double getResourceBarRatioEnd(String resourcename)
-        {
-            if (String.IsNullOrEmpty(resourcename)) 
-            {
-                Debug.LogError("[KSPI]: getResourceBarRatioEnd resourcename is null or empty");
-                return 0;
-            }
-
-            ResourceManager manager = getManagerForVessel(resourcename);
-            if (manager == null)
-                return 0;
-
-            return manager.ResourceBarRatioEnd;
-        }
-
-        public double getSpareResourceCapacity(String resourcename)
-        {
-            if (String.IsNullOrEmpty(resourcename)) 
-            {
-                Debug.LogError("[KSPI]: getSpareResourceCapacity resourcename is null or empty");
-                return 0;
-            }
-
-            ResourceManager manager = getManagerForVessel(resourcename);
-            if (manager == null)
-                return 0;
-
-            return manager.getSpareResourceCapacity();
-        }
-
-        public double getResourceAvailability(String resourcename)
-        {
-            if (String.IsNullOrEmpty(resourcename)) 
-            {
-                Debug.LogError("[KSPI]: getResourceAvailability resourcename is null or empty");
-                return 0;
-            }
-
-            ResourceManager manager = getManagerForVessel(resourcename);
-            if (manager == null)
-                return 0;
-
-            return manager.getResourceAvailability();
-        }
-
-        public double getTotalResourceCapacity(String resourcename)
-        {
-            if (String.IsNullOrEmpty(resourcename)) 
-            {
-                Debug.LogError("[KSPI]: getTotalResourceCapacity resourcename is null or empty");
-                return 0;
-            }
-
-            ResourceManager manager = getManagerForVessel(resourcename);
-            if (manager == null)
-                return 0;
-
-            return manager.getTotalResourceCapacity();
-        }
-
-        public override void OnStart(PartModule.StartState state)
-        {
-            if (state == StartState.Editor || resources_to_supply == null) return;
+            if (state == StartState.Editor || resourcesToSupply == null) return;
 
             part.OnJustAboutToBeDestroyed -= OnJustAboutToBeDestroyed;
             part.OnJustAboutToBeDestroyed += OnJustAboutToBeDestroyed;
 
-            foreach (String resourcename in resources_to_supply)
+            foreach (string resourceName in resourcesToSupply)
             {
-                ResourceManager manager = getOvermanagerForResource(resourcename).getManagerForVessel(vessel);
+                ResourceManager manager = getOvermanagerForResource(resourceName).GetManagerForVessel(vessel);
 
-                if (manager == null)
-                {
-                    similarParts = null;
-                    manager = CreateResourceManagerForResource(resourcename);
+                if (manager != null) continue;
 
-                    Debug.Log("[KSPI]: ResourceSuppliableModule.OnStart created Resource Manager for Vessel " + vessel.GetName() + " for " + resourcename + " with manager Id " + manager.Id + " and overmanager id " + manager.OverManagerId);
-                }
+                similarParts = null;
+                manager = CreateResourceManagerForResource(resourceName);
+
+                Debug.Log("[KSPI]: ResourceSuppliableModule.OnStart created Resource Manager for Vessel " + vessel.GetName() + " for " + resourceName + " with manager Id " + manager.Id + " and overmanager id " + manager.OverManagerId);
             }
 
-            var priorityManager = getSupplyPriorityManager(this.vessel);
-            if (priorityManager != null)
-                priorityManager.Register(this);
+            var priorityManager = getSupplyPriorityManager(vessel);
+            priorityManager?.Register(this);
         }
 
         private void OnJustAboutToBeDestroyed()
@@ -720,77 +633,65 @@ namespace FNPlugin
 
             Debug.LogWarning("[KSPI]: detecting supplyable part " + part.partInfo.title + " is being destroyed");
 
-            var priority_manager = getSupplyPriorityManager(this.vessel);
-            if (priority_manager != null)
-                priority_manager.Unregister(this);
-        }
-
-        protected double TimeWarpFixedDeltaTime
-        {
-            get { return (double)(decimal)Math.Round(TimeWarp.fixedDeltaTime, 7); }
+            var priorityManager = getSupplyPriorityManager(vessel);
+            priorityManager?.Unregister(this);
         }
 
         public override void OnFixedUpdate()
         {
-            timeWarpFixedDeltaTime = TimeWarpFixedDeltaTime;
+            double timeWarpFixedDeltaTime = Math.Min(PluginSettings.Config.MaxResourceProcessingTimewarp, TimeWarp.fixedDeltaTime);
 
             updateCounter++;
 
-            if (resources_to_supply == null) return;
+            if (resourcesToSupply == null) return;
 
-            foreach (String resourcename in resources_to_supply)
+            foreach (string resourceName in resourcesToSupply)
             {
-                var overmanager = getOvermanagerForResource(resourcename);
+                var overmanager = getOvermanagerForResource(resourceName);
 
-                ResourceManager resource_manager = null;;
+                ResourceManager resourceManager = null;;
 
                 if (overmanager != null)
-                    resource_manager = overmanager.getManagerForVessel(vessel);
+                    resourceManager = overmanager.GetManagerForVessel(vessel);
 
-                if (resource_manager == null)
+                if (resourceManager == null)
                 {
                     similarParts = null;
-                    resource_manager = CreateResourceManagerForResource(resourcename);
+                    resourceManager = CreateResourceManagerForResource(resourceName);
 
-                     Debug.Log("[KSPI]: ResourceSuppliableModule.OnFixedUpdate created Resourcemanager for Vessel " + vessel.GetName() + " for " + resourcename + " with ResourseManagerId " + resource_manager.Id + " with OvermanagerId" + resource_manager.Id);
+                    Debug.Log("[KSPI]: ResourceSuppliableModule.OnFixedUpdate created ResourceManager for Vessel " + vessel.GetName() + " for " + resourceName + " with ResourceManagerId " + resourceManager.Id + " and OvermanagerId" + resourceManager.Id);
                 }
 
-                if (resource_manager != null)
-                {
-                    if (resource_manager.PartModule == null || resource_manager.PartModule.vessel != this.vessel || resource_manager.Counter < updateCounter)
-                        resource_manager.UpdatePartModule(this);
+                if (resourceManager.PartModule == null || resourceManager.PartModule.vessel != vessel || resourceManager.Counter < updateCounter)
+                    resourceManager.UpdatePartModule(this);
 
-                    if (resource_manager.PartModule == this)
-                        resource_manager.update(updateCounter);
-                }
+                if (resourceManager.PartModule == this)
+                    resourceManager.Update(updateCounter);
             }
 
-            var priority_manager = getSupplyPriorityManager(this.vessel);
-            if (priority_manager != null)
+            var priorityManager = getSupplyPriorityManager(this.vessel);
+            if (priorityManager != null)
             {
-                priority_manager.Register(this);
+                priorityManager.Register(this);
 
-                if (priority_manager.ProcessingPart == null || priority_manager.ProcessingPart.vessel != this.vessel || priority_manager.Counter < updateCounter)
-                    priority_manager.UpdatePartModule(this);
+                if (priorityManager.ProcessingPart == null || priorityManager.ProcessingPart.vessel != this.vessel || priorityManager.Counter < updateCounter)
+                    priorityManager.UpdatePartModule(this);
 
-                if (priority_manager.ProcessingPart == this)
-                    priority_manager.UpdateResourceSuppliables(updateCounter, timeWarpFixedDeltaTime);
+                if (priorityManager.ProcessingPart == this)
+                    priorityManager.UpdateResourceSuppliables(updateCounter, timeWarpFixedDeltaTime);
             }
         }
 
         public void RemoveItselfAsManager()
         {
-            foreach (String resourcename in resources_to_supply)
+            foreach (string resourceName in resourcesToSupply)
             {
-                var overmanager = getOvermanagerForResource(resourcename);
+                var overmanager = getOvermanagerForResource(resourceName);
 
-                if (overmanager == null)
-                    continue;
+                ResourceManager resourceManager = overmanager?.GetManagerForVessel(vessel);
 
-                ResourceManager resource_manager = overmanager.getManagerForVessel(vessel);
-
-                if (resource_manager != null && resource_manager.PartModule == this)
-                    resource_manager.UpdatePartModule(null);
+                if (resourceManager != null && resourceManager.PartModule == this)
+                    resourceManager.UpdatePartModule(null);
             }
         }
 
@@ -800,8 +701,8 @@ namespace FNPlugin
 
             if (similarParts == null)
             {
-                similarParts = vessel.parts.Where(m => m.partInfo.title == this.part.partInfo.title).ToList();
-                partNrInList = 1 + similarParts.IndexOf(this.part);
+                similarParts = vessel.parts.Where(m => m.partInfo.title == part.partInfo.title).ToList();
+                partNrInList = 1 + similarParts.IndexOf(part);
             }
 
             if (similarParts.Count > 1)
@@ -816,35 +717,35 @@ namespace FNPlugin
             return 2;
         }
 
-        public virtual int getSupplyPriority()
+        public virtual int GetSupplyPriority()
         {
             return getPowerPriority();
         }
 
-        private ResourceManager CreateResourceManagerForResource(string resourcename)
+        private ResourceManager CreateResourceManagerForResource(string resourceName)
         {
-            return getOvermanagerForResource(resourcename).CreateManagerForVessel(this);
+            return getOvermanagerForResource(resourceName).CreateManagerForVessel(this);
         }
 
-        private ResourceOvermanager getOvermanagerForResource(string resourcename)
+        private ResourceOvermanager getOvermanagerForResource(string resourceName)
         {
-            return ResourceOvermanager.getResourceOvermanagerForResource(resourcename);
+            return ResourceOvermanager.GetResourceOvermanagerForResource(resourceName);
         }
 
-        protected ResourceManager getManagerForVessel(string resourcename)
+        protected ResourceManager GetManagerForVessel(string resourceName)
         {
-            return getManagerForVessel(resourcename, vessel);
+            return GetManagerForVessel(resourceName, vessel);
         }
 
-        private ResourceManager getManagerForVessel(string resourcename, Vessel vessel)
+        private ResourceManager GetManagerForVessel(string resourceName, Vessel vessel)
         {
-            var overmanager = getOvermanagerForResource(resourcename);
+            var overmanager = getOvermanagerForResource(resourceName);
             if (overmanager == null)
             {
-                Debug.LogError("[KSPI]: ResourceSuppliableModule failed to find " + resourcename + " Overmanager for " + vessel.name);
+                Debug.LogError("[KSPI]: ResourceSuppliableModule failed to find " + resourceName + " Overmanager for " + vessel.name);
                 return null;
             }
-            return overmanager.getManagerForVessel(vessel);
+            return overmanager.GetManagerForVessel(vessel);
         }
 
         private SupplyPriorityManager getSupplyPriorityManager(Vessel vessel)

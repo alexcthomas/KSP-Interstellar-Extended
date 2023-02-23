@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>InterstellarFuelSwitch</RootNamespace>
     <AssemblyName>InterstellarFuelSwitch</AssemblyName>
-    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -24,13 +24,14 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
+    <DebugType>portable</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>false</Prefer32Bit>
+    <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="999_Scale_Redist">
@@ -74,6 +75,10 @@
     <Compile Include="AnimatedContainerContent.cs" />
     <Compile Include="IFSCryostat.cs" />
     <Compile Include="IFSinfoPopup.cs" />
+    <Compile Include="IFSModuleDecouple.cs" />
+    <Compile Include="IFSModuleAnchoredDecoupler.cs" />
+    <Compile Include="IFSResourceTransfer.cs" />
+    <Compile Include="ModuleInventoryPartController.cs" />
     <Compile Include="InterstellarAnimate.cs" />
     <Compile Include="InterstellarDynamicResourceBuffer.cs" />
     <Compile Include="InterstellarResourceConverter.cs" />
@@ -84,9 +89,11 @@
     <Compile Include="InterstellarNodeLoader.cs" />
     <Compile Include="InterstellarTextureSwitch.cs" />
     <Compile Include="IFSRadioactiveDecay.cs" />
+    <Compile Include="Kerbalism.cs" />
     <Compile Include="ParseTools.cs" />
     <Compile Include="PartExtensions.cs" />
     <Compile Include="HideHiddenPartsFilter.cs" />
+    <Compile Include="ProcessControlMetaData.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

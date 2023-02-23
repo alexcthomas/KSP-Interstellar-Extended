@@ -7,78 +7,67 @@ namespace FNPlugin.External
 {
     public class FNEmitterController:  PartModule
     {
-        // Persistant input
-        [KSPField(isPersistant = true)]
-        public double reactorActivityFraction;
-        [KSPField(isPersistant = true, guiName = "Fuel Neutrons Fraction")]
+        // Persistent input
+        [KSPField(isPersistant = true, guiName = "#LOC_KSPIE_FNEmitterContoller_FuelNeutronsFraction")]//Fuel Neutrons Fraction
         public double fuelNeutronsFraction = 0.02;
-        [KSPField(isPersistant = true)]
-        public double lithiumNeutronAbsorbtionFraction;
-        [KSPField(isPersistant = true)]
-        public double exhaustActivityFraction;
-        [KSPField(isPersistant = true)]
-        public double radioactiveFuelLeakFraction;
-        [KSPField(isPersistant = true)]
-        public bool exhaustProducesNeutronRadiation = false;
-        [KSPField(isPersistant = true)]
-        public bool exhaustProducesGammaRadiation = false;
+
+        [KSPField(isPersistant = true)] public double reactorActivityFraction;
+        [KSPField(isPersistant = true)] public double lithiumNeutronAbsorbtionFraction;
+        [KSPField(isPersistant = true)] public double exhaustActivityFraction;
+        [KSPField(isPersistant = true)] public double radioactiveFuelLeakFraction;
+        [KSPField(isPersistant = true)] public bool exhaustProducesNeutronRadiation = false;
+        [KSPField(isPersistant = true)] public bool exhaustProducesGammaRadiation = false;
 
         //Setting
-        [KSPField(guiActiveEditor = true, guiName = "Max Gamma Radiation")]
+        [KSPField(guiActiveEditor = true, guiName = "#LOC_KSPIE_FNEmitterContoller_MaxGammaRadiation")]//Max Gamma Radiation
         public double maxRadiation = 0.02;
-        [KSPField]
-        public double neutronsExhaustRadiationMult = 1;
-        [KSPField]
-        public double gammaRayExhaustRadiationMult = 0.5;
-        [KSPField]
-        public double neutronScatteringRadiationMult = 20;
-        [KSPField]
-        public double diameter = 1;
-        [KSPField]
-        public double height = 0;
-        [KSPField]
-        public double habitatMassMultiplier = 20;
-        [KSPField]
-        public double reactorMassMultiplier = 10; 
+
+        [KSPField] public double neutronsExhaustRadiationMult = 1;
+        [KSPField] public double gammaRayExhaustRadiationMult = 0.5;
+        [KSPField] public double neutronScatteringRadiationMult = 20;
+        [KSPField] public double diameter = 1;
+        [KSPField] public double height;
+        [KSPField] public double habitatMassMultiplier = 20;
+        [KSPField] public double reactorMassMultiplier = 10;
 
         // Gui
-        [KSPField(guiActive = false, guiName = "Distance Radiation Modifier", guiFormat = "F5")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_DistanceRadiationModifier", guiFormat = "F5")]//Distance Radiation Modifier
         public double averageDistanceModifier;
-        [KSPField(guiActive = false, guiName = "Average Distance To Crew", guiFormat = "F5")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_AverageDistanceToCrew", guiFormat = "F5")]//Average Distance To Crew
         public double averageCrewDistanceToEmitter;
-        [KSPField(guiActive = false, guiName = "Average Crew Mass Protection", guiUnits = " g/cm2", guiFormat = "F5")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_AverageCrewMassProtection", guiUnits = " g/cm2", guiFormat = "F5")]//Average Crew Mass Protection
         public double averageCrewMassProtection;
-        [KSPField(guiActive = false, guiName = "Reactor Shadow Mass Protection")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_ReactorShadowMassProtection")]//Reactor Shadow Mass Protection
         public double reactorShadowShieldMassProtection;
-        [KSPField(guiActive = false, guiName = "reactor Lead Shielding Thickness", guiUnits = " cm", guiFormat = "F5")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_ReactorLeadShieldingThickness", guiUnits = " cm", guiFormat = "F5")]//reactor Lead Shielding Thickness
         public double reactorLeadShieldingThickness;
-        [KSPField(guiActive = false, guiName = "Average Habitat Lead Thickness", guiUnits = " cm", guiFormat = "F5")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_AverageHabitatLeadThickness", guiUnits = " cm", guiFormat = "F5")]//Average Habitat Lead Thickness
         public double averageHabitatLeadEquivalantThickness;
-        [KSPField(guiActive = false, guiName = "Reactor Shadow Shield Lead Thickness", guiUnits = " cm", guiFormat = "F5")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_ReactorShadowShieldLeadThickness", guiUnits = " cm", guiFormat = "F5")]//Reactor Shadow Shield Lead Thickness
         public double reactorShadowShieldLeadThickness;
-        [KSPField(guiActive = false, guiName = "Reactor GammaRays Attenuation", guiFormat = "F5")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_ReactorGammaRaysAttenuation", guiFormat = "F5")]//Reactor GammaRays Attenuation
         public double reactorShieldingGammaAttenuation;
-        [KSPField(guiActive = false, guiName = "Reactor Neutron Attenuation", guiFormat = "F5")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_ReactorNeutronAttenuation", guiFormat = "F5")]//Reactor Neutron Attenuation
         public double reactorShieldingNeutronAttenuation;
-        [KSPField(guiActive = false, guiName = "Average GammaRays Attenuation", guiFormat = "F5")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_AverageGammaRaysAttenuation", guiFormat = "F5")]//Average GammaRays Attenuation
         public double averageHabitatLeadGammaAttenuation;
-        [KSPField(guiActive = false, guiName = "Average Neutron Attenuation", guiFormat = "F5")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_AverageNeutronAttenuation", guiFormat = "F5")]//Average Neutron Attenuation
         public double averageHabitaNeutronAttenuation;
-        [KSPField(guiActive = false, guiName = "Emitter Radiation Rate")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_EmitterRadiationRate")]//Emitter Radiation Rate
         public double emitterRadiationRate;
-        [KSPField(guiActive = false, guiName = "Gamma Transparency")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_GammaTransparency")]//Gamma Transparency
         public double gammaTransparency;
 
         // Output
-        [KSPField(guiActive = false, guiName = "Reactor Core Neutron Radiation")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_ReactorCoreNeutronRadiation")]//Reactor Core Neutron Radiation
         public double reactorCoreNeutronRadiation;
-        [KSPField(guiActive = false, guiName = "Reactor Core Gamma Radiation")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_ReactorCoreGammaRadiation")]//Reactor Core Gamma Radiation
         public double reactorCoreGammaRadiation;
-        [KSPField(guiActive = false, guiName = "Lost Fission Fuel Radiation")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_LostFissionFuelRadiation")]//Lost Fission Fuel Radiation
         public double lostFissionFuelRadiation;
-        [KSPField(guiActive = false, guiName = "Fission Exhaust Radiation")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_FissionExhaustRadiation")]//Fission Exhaust Radiation
         public double fissionExhaustRadiation;
-        [KSPField(guiActive = false, guiName = "Fission Fragment Radiation")]
+        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_FNEmitterContoller_FissionFragmentRadiation")]//Fission Fragment Radiation
         public double fissionFragmentRadiation;
 
         // Privates
@@ -100,11 +89,11 @@ namespace FNPlugin.External
         {
             if (Kerbalism.versionMajor == 0)
             {
-                UnityEngine.Debug.Log("[KSPI]: Skipped Initialize FNEmitterController");
+                Debug.Log("[KSPI]: Skipped Initialize FNEmitterController");
                 return;
             }
 
-            UnityEngine.Debug.Log("[KSPI]: FNEmitterController Initialize");
+            Debug.Log("[KSPI]: FNEmitterController Initialize");
 
             shieldingPartResource = part.Resources["Shielding"];
             if (shieldingPartResource != null)
@@ -114,7 +103,7 @@ namespace FNPlugin.External
                     height = diameter;
 
                 var ratio = shieldingPartResource.amount / shieldingPartResource.maxAmount;
-                shieldingPartResource.maxAmount = (2 * Math.PI * radius * radius) + (2 * Math.PI * radius * height);    // 2 π r2 + 2 π r h 
+                shieldingPartResource.maxAmount = (2 * Math.PI * radius * radius) + (2 * Math.PI * radius * height);    // 2 π r2 + 2 π r h
                 shieldingPartResource.amount = shieldingPartResource.maxAmount * ratio;
             }
 
@@ -124,21 +113,20 @@ namespace FNPlugin.External
             bool found = false;
             foreach (PartModule module in part.Modules)
             {
-                if (module.moduleName == "Emitter")
-                {
-                    emitterModule = module;
+                if (module.moduleName != "Emitter") continue;
 
-                    emitterRadiationField = module.Fields["radiation"];
+                emitterModule = module;
 
-                    found = true;
-                    break;
-                }
+                emitterRadiationField = module.Fields["radiation"];
+
+                found = true;
+                break;
             }
 
             if (found)
-                UnityEngine.Debug.Log("[KSPI]: FNEmitterController Found Emitter");
+                Debug.Log("[KSPI]: FNEmitterController Found Emitter");
             else
-                UnityEngine.Debug.LogWarning("[KSPI]: FNEmitterController failed to find Emitter");
+                Debug.LogWarning("[KSPI]: FNEmitterController failed to find Emitter");
         }
 
         private void UpdateKerbalismEmitter()

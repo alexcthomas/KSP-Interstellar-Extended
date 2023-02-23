@@ -1,4 +1,6 @@
-﻿using System;
+﻿using FNPlugin.Resources;
+using KSP.Localization;
+using System;
 
 namespace FNPlugin.Reactors
 {
@@ -8,17 +10,13 @@ namespace FNPlugin.Reactors
     [KSPModule("Magnetic Confinement Fusion Reactor")]
     class InterstellarTokamakFusionReactor : InterstellarFusionReactor
     {
-        // persistants
-        [KSPField(isPersistant = true)]
-        public double storedPlasmaEnergyRatio;
+        // persistent
+        [KSPField(isPersistant = true)] public double storedPlasmaEnergyRatio;
 
         // configs
-        [KSPField]
-        public double plasmaBufferSize = 10;
-        [KSPField]
-        public double minimumHeatingRequirements = 0.1;
-        [KSPField]
-        public double heatingRequestExponent = 1.5;
+        [KSPField] public double plasmaBufferSize = 10;
+        [KSPField] public double minimumHeatingRequirements = 0.1;
+        [KSPField] public double heatingRequestExponent = 1.5;
 
         // help varaiables
         public bool fusion_alert;
@@ -33,7 +31,10 @@ namespace FNPlugin.Reactors
             {
                 heatingPowerRequirements = CurrentFuelMode == null
                     ? PowerRequirement
-                    : PowerRequirement * CurrentFuelMode.NormalisedPowerRequirements;
+                    : PowerRequirement * CurrentFuelMode.NormalizedPowerRequirements;
+
+                if (heatingPowerRequirements <= 0)
+                    return 0;
 
                 heatingPowerRequirements = Math.Max(heatingPowerRequirements * Math.Pow(required_reactor_ratio, heatingRequestExponent), heatingPowerRequirements * minimumHeatingRequirements);
 
@@ -44,7 +45,8 @@ namespace FNPlugin.Reactors
         public override void OnUpdate()
         {
             base.OnUpdate();
-            if (!isSwappingFuelMode && (!CheatOptions.InfiniteElectricity && getDemandStableSupply(ResourceManager.FNRESOURCE_MEGAJOULES) > 1.01 && getResourceBarRatio(ResourceManager.FNRESOURCE_MEGAJOULES) < 0.25) && IsEnabled && !fusion_alert)
+            if (!isSwappingFuelMode && (!CheatOptions.InfiniteElectricity && GetDemandStableSupply(ResourceSettings.Config.ElectricPowerInMegawatt) > 1.01
+                                                                          && GetResourceBarRatio(ResourceSettings.Config.ElectricPowerInMegawatt) < 0.25) && IsEnabled && !fusion_alert)
                 fusionAlertFrames++;
             else
             {
@@ -54,28 +56,31 @@ namespace FNPlugin.Reactors
 
             if (fusionAlertFrames > 2)
             {
-                ScreenMessages.PostScreenMessage("Warning: Fusion Reactor plasma heating cannot be guaranteed, reducing power requirements is recommended.", 0.1f, ScreenMessageStyle.UPPER_CENTER);
+                ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_KSPIE_TokomakFusionReator_PostMsg1"), 0.1f, ScreenMessageStyle.UPPER_CENTER);//"Warning: Fusion Reactor plasma heating cannot be guaranteed, reducing power requirements is recommended."
                 fusion_alert = true;
             }
 
-            electricPowerMaintenance = PluginHelper.getFormattedPowerString(power_consumed) + " / " + PluginHelper.getFormattedPowerString(heatingPowerRequirements);
+            electricPowerMaintenance = PluginHelper.GetFormattedPowerString(power_consumed) + " / " + PluginHelper.GetFormattedPowerString(heatingPowerRequirements);
         }
 
         private double GetPlasmaRatio(double receivedPowerPerSecond, double fusionPowerRequirement)
         {
-            if (receivedPowerPerSecond > fusionPowerRequirement)
+            if (fusionPowerRequirement <= 0)
+                return 1;
+
+            if (receivedPowerPerSecond >= fusionPowerRequirement)
             {
                 storedPlasmaEnergyRatio += ((receivedPowerPerSecond - fusionPowerRequirement) / PowerRequirement);
                 receivedPowerPerSecond = fusionPowerRequirement;
             }
             else
             {
-                var shortageRatio = (fusionPowerRequirement - receivedPowerPerSecond) / PowerRequirement;
-                if (shortageRatio < storedPlasmaEnergyRatio)
+                if (required_reactor_ratio > 0)
                 {
-                    storedPlasmaEnergyRatio -= (shortageRatio / PowerRequirement);
-                    receivedPowerPerSecond = fusionPowerRequirement;
+                    storedPlasmaEnergyRatio -= (fusionPowerRequirement - receivedPowerPerSecond) / PowerRequirement;
                 }
+
+                receivedPowerPerSecond = Math.Min(1, storedPlasmaEnergyRatio) * fusionPowerRequirement;
             }
 
             return Math.Round(fusionPowerRequirement > 0 ? receivedPowerPerSecond / fusionPowerRequirement : 1, 4);
@@ -89,7 +94,7 @@ namespace FNPlugin.Reactors
 
             var fixedDeltaTime = (double)(decimal)TimeWarp.fixedDeltaTime;
 
-            var availablePower = getResourceAvailability(ResourceManager.FNRESOURCE_MEGAJOULES);
+            var availablePower = GetResourceAvailability(ResourceSettings.Config.ElectricPowerInMegawatt);
 
             var fusionPowerRequirement = PowerRequirement;
 
@@ -98,11 +103,11 @@ namespace FNPlugin.Reactors
                 // consume from any stored megajoule source
                 power_consumed = CheatOptions.InfiniteElectricity
                     ? fusionPowerRequirement
-                    : part.RequestResource(ResourceManager.FNRESOURCE_MEGAJOULES, fusionPowerRequirement * fixedDeltaTime) / fixedDeltaTime;
+                    : part.RequestResource(ResourceSettings.Config.ElectricPowerInMegawatt, fusionPowerRequirement * fixedDeltaTime) / fixedDeltaTime;
             }
             else
             {
-                var message = "Not enough power to start fusion reactor, it requires at " + fusionPowerRequirement.ToString("F2") + " MW";
+                var message = Localizer.Format("#LOC_KSPIE_TokomakFusionReator_PostMsg2", fusionPowerRequirement.ToString("F2"));//"Not enough power to start fusion reactor, it requires at " +  + " MW"
                 UnityEngine.Debug.Log("[KSPI]: " + message);
                 ScreenMessages.PostScreenMessage(message, 5f, ScreenMessageStyle.LOWER_CENTER);
                 return;
@@ -115,11 +120,11 @@ namespace FNPlugin.Reactors
             if (allowJumpStart)
             {
                 storedPlasmaEnergyRatio = 1;
-                ScreenMessages.PostScreenMessage("Starting fusion reaction", 5f, ScreenMessageStyle.LOWER_CENTER);
+                ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_KSPIE_TokomakFusionReator_PostMsg3"), 5f, ScreenMessageStyle.LOWER_CENTER);//"Starting fusion reaction"
                 jumpstartPowerTime = 10;
             }
             else
-                ScreenMessages.PostScreenMessage("Not enough power to start fusion reaction", 5f, ScreenMessageStyle.LOWER_CENTER);
+                ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_KSPIE_TokomakFusionReator_PostMsg4"), 5f, ScreenMessageStyle.LOWER_CENTER);//"Not enough power to start fusion reaction"
         }
 
         public override void OnFixedUpdate()
@@ -129,15 +134,24 @@ namespace FNPlugin.Reactors
             {
                 var fusionPowerRequirement = HeatingPowerRequirements;
 
-                var requestedPower = fusionPowerRequirement + ((plasmaBufferSize - storedPlasmaEnergyRatio) * PowerRequirement);
+                if (fusionPowerRequirement <= 0)
+                {
+                    plasma_ratio = 1;
+                    power_consumed = 0;
+                    return;
+                }
+
+                var requestedPower = reactor_power_ratio <= 0 ? 0
+                    : fusionPowerRequirement + ((plasmaBufferSize - storedPlasmaEnergyRatio) * PowerRequirement);
 
                 // consume power from managed power source
                 power_consumed = CheatOptions.InfiniteElectricity
                     ? requestedPower
-                    : consumeFNResourcePerSecond(requestedPower, ResourceManager.FNRESOURCE_MEGAJOULES);
+                    : ConsumeFnResourcePerSecond(requestedPower, ResourceSettings.Config.ElectricPowerInMegawatt);
 
                 if (maintenancePowerWasteheatRatio > 0)
-                    supplyFNResourcePerSecond(maintenancePowerWasteheatRatio * power_consumed, ResourceManager.FNRESOURCE_WASTEHEAT);
+                    SupplyFnResourcePerSecond(maintenancePowerWasteheatRatio * power_consumed,
+                        ResourceSettings.Config.WasteHeatInMegawatt);
 
                 if (isSwappingFuelMode)
                 {
@@ -181,6 +195,13 @@ namespace FNPlugin.Reactors
             }
 
             base.OnStart(state);
+        }
+
+        public override void UpdateEditorPowerOutput()
+        {
+            base.UpdateEditorPowerOutput();
+            required_reactor_ratio = 1.0;
+            electricPowerMaintenance = PluginHelper.GetFormattedPowerString(HeatingPowerRequirements) + " / " + PluginHelper.GetFormattedPowerString(HeatingPowerRequirements);
         }
     }
 }

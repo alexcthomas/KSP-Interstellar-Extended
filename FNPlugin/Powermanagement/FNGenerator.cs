@@ -1,28 +1,23 @@
+using FNPlugin.Beamedpower;
+using FNPlugin.Constants;
 using FNPlugin.Extensions;
 using FNPlugin.Power;
+using FNPlugin.Powermanagement.Interfaces;
+using FNPlugin.Reactors;
 using FNPlugin.Redist;
+using FNPlugin.Resources;
 using FNPlugin.Wasteheat;
 using KSP.Localization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+using System.Reflection;
 using TweakScale;
 using UnityEngine;
-using FNPlugin.Reactors;
 
-namespace FNPlugin
+namespace FNPlugin.Powermanagement
 {
     enum PowerStates { PowerOnline, PowerOffline };
-
-    [KSPModule("Super Capacitator")]
-    class KspiSuperCapacitator : PartModule
-    {
-        [KSPField(isPersistant = false, guiActiveEditor = true, guiName = "Max Capacity", guiUnits = " MWe")]
-        public float maxStorageCapacityMJ = 0;
-        [KSPField(isPersistant = false, guiActive = true, guiActiveEditor = true, guiName = "Mass", guiUnits = " t")]
-        public float partMass = 0;
-    }
 
     [KSPModule("Thermal Electric Effect Generator")]
     class ThermalElectricEffectGenerator : FNGenerator {}
@@ -40,333 +35,198 @@ namespace FNPlugin
     class ChargedParticlesPowerGenerator : FNGenerator {}
 
     [KSPModule(" Generator")]
-    class FNGenerator : ResourceSuppliableModule, IUpgradeableModule, IElectricPowerGeneratorSource, IPartMassModifier, IRescalable<FNGenerator>
+    class FNGenerator : ResourceSuppliableModule, IUpgradeableModule, IFNElectricPowerGeneratorSource, IPartMassModifier, IRescalable<FNGenerator>
     {
-        // Persistent
-        [KSPField(isPersistant = true)]
-        public bool IsEnabled = true;
-        [KSPField(isPersistant = true)]
-        public bool generatorInit = false;
-        [KSPField(isPersistant = true)]
-        public bool isupgraded = false;
-        [KSPField(isPersistant = true)]
-        public bool chargedParticleMode = false;
-        [KSPField(isPersistant = true)]
-        public double storedMassMultiplier;
-        [KSPField(isPersistant = true, guiActiveEditor = true, guiName = "#LOC_KSPIE_Generator_powerCapacity"), UI_FloatRange(stepIncrement = 0.5f, maxValue = 100f, minValue = 0.5f)]
-        public float powerCapacity = 100;
-        [KSPField(isPersistant = true, guiActive = true, guiName = "#LOC_KSPIE_Generator_powerControl"), UI_FloatRange(stepIncrement = 0.5f, maxValue = 100f, minValue = 0.5f)]
-        public float powerPercentage = 100;
+        public const string GROUP = "FNGenerator";
+        public const string GROUP_TITLE = "#LOC_KSPIE_Generator_groupName";
 
-        [KSPField]
-        public float powerCapacityMaxValue = 100;
-        [KSPField]
-        public float powerCapacityMinValue = 0.5f;
-        [KSPField]
-        public float powerCapacityStepIncrement = 0.5f;
+        // Persistent
+        [KSPField(isPersistant = true)] public bool IsEnabled = true;
+        [KSPField(isPersistant = true)] public bool generatorInit;
+        [KSPField(isPersistant = true)] public bool isUpgraded;
+        [KSPField(isPersistant = true)] public bool chargedParticleMode = false;
+        [KSPField(isPersistant = true)] public double storedMassMultiplier;
+        [KSPField(isPersistant = true)] public bool hasAdjustPowerPercentage;   // ToDo remove in the future
 
         // Settings
-        [KSPField]
-        public bool isHighPower = false;
-        [KSPField]
-        public bool isMHD = false;
-        [KSPField]
-        public bool isLimitedByMinThrotle = false;
-        [KSPField]
-        public double powerOutputMultiplier = 1;
-        [KSPField]
-        public double hotColdBathRatio;
-        [KSPField]
-        public bool calculatedMass = false;
-        [KSPField]
-        public string upgradedName = "";
-        [KSPField]
-        public string originalName = "";
-        [KSPField]
-        public double pCarnotEff = 0.32;
-        [KSPField]
-        public double upgradedpCarnotEff = 0.64;
-        [KSPField]
-        public double directConversionEff = 0.6;
-        [KSPField]
-        public double upgradedDirectConversionEff = 0.865;
+        [KSPField] public string animName = "";
+        [KSPField] public string upgradeTechReq = "";
+        [KSPField] public string upgradeCostStr = "";
 
-        [KSPField]
-        public double efficiencyMk1 = 0;
-        [KSPField]
-        public double efficiencyMk2 = 0;
-        [KSPField]
-        public double efficiencyMk3 = 0;
-        [KSPField]
-        public double efficiencyMk4 = 0;
-        [KSPField]
-        public double efficiencyMk5 = 0;
-        [KSPField]
-        public double efficiencyMk6 = 0;
-        [KSPField]
-        public double efficiencyMk7 = 0;
-        [KSPField]
-        public double efficiencyMk8 = 0;
-        [KSPField]
-        public double efficiencyMk9 = 0;
+        [KSPField] public bool useResourceBuffers = true;
+        [KSPField] public bool calculatedMass = false;
+        [KSPField] public bool isHighPower = false;
+        [KSPField] public bool isMHD = false;
+        [KSPField] public bool isLimitedByMinThrottle = false;
+        [KSPField] public bool maintainsMegaWattPowerBuffer = true;
+        [KSPField] public bool showSpecialisedUI = true;
+        [KSPField] public bool showDetailedInfo = true;
+        [KSPField] public bool controlWasteHeatBuffer = true;
 
-        [KSPField]
-        public string Mk2TechReq = "";
-        [KSPField]
-        public string Mk3TechReq = "";
-        [KSPField]
-        public string Mk4TechReq = "";
-        [KSPField]
-        public string Mk5TechReq = "";
-        [KSPField]
-        public string Mk6TechReq = "";
-        [KSPField]
-        public string Mk7TechReq = "";
-        [KSPField]
-        public string Mk8TechReq = "";
-        [KSPField]
-        public string Mk9TechReq = "";
+        [KSPField] public float upgradeCost = 1;
+        [KSPField] public float powerCapacityMaxValue = 100;
+        [KSPField] public float powerCapacityMinValue = 0.5f;
+        [KSPField] public float powerCapacityStepIncrement = 0.5f;
 
-        [KSPField(guiActiveEditor = true, guiName = "#LOC_KSPIE_Generator_maxGeneratorEfficiency")]
-        public double maxEfficiency = 0;
-        [KSPField]
-        public string animName = "";
-        [KSPField]
-        public string upgradeTechReq = "";
-        [KSPField]
-        public float upgradeCost = 1;
-        [KSPField(guiActiveEditor = true, guiName = "#LOC_KSPIE_Generator_radius")]
-        public double radius = 2.5;
-        [KSPField]
-        public string altUpgradedName = "";
-        [KSPField]
-        public double wasteHeatMultiplier = 1;
-        [KSPField]
-        public bool maintainsMegaWattPowerBuffer = true;
-        [KSPField]
-        public bool fullPowerBuffer = false;
-        [KSPField]
-        public bool showSpecialisedUI = true;
-        [KSPField]
-        public bool showDetailedInfo = true;
+        [KSPField] public double efficiencyMk1;
+        [KSPField] public double efficiencyMk2;
+        [KSPField] public double efficiencyMk3;
+        [KSPField] public double efficiencyMk4;
+        [KSPField] public double efficiencyMk5;
+        [KSPField] public double efficiencyMk6;
+        [KSPField] public double efficiencyMk7;
+        [KSPField] public double efficiencyMk8;
+        [KSPField] public double efficiencyMk9;
 
-        /// <summary>
-        /// MW Power to part mass divider, need to be lower for SETI/NFE mode 
-        /// </summary>
-        [KSPField]
-        public double rawPowerToMassDivider = 1000;
-        [KSPField( guiName = "#LOC_KSPIE_Generator_maxUsageRatio")]
+        [KSPField] public string Mk2TechReq = "";
+        [KSPField] public string Mk3TechReq = "";
+        [KSPField] public string Mk4TechReq = "";
+        [KSPField] public string Mk5TechReq = "";
+        [KSPField] public string Mk6TechReq = "";
+        [KSPField] public string Mk7TechReq = "";
+        [KSPField] public string Mk8TechReq = "";
+        [KSPField] public string Mk9TechReq = "";
+
+        [KSPField] public double powerOutputMultiplier = 1;
+        [KSPField] public double wasteHeatMultiplier = 1;
+        [KSPField] public double baseHeatAmount = 2.0e+5;
+        [KSPField] public double massModifier = 1;
+        [KSPField] public double rawPowerToMassDivider = 1000;
+        [KSPField] public double coreTemperateHotBathExponent = 0.7;
+        [KSPField] public double capacityToMassExponent = 0.7;
+        [KSPField] public double minimumBufferSize = 0;
+        [KSPField] public double coldBathTemp = 500;
+        [KSPField] public double maximumGeneratorPowerEC;
+
+        // Gui
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, isPersistant = true, guiActiveEditor = true, guiName = "#LOC_KSPIE_Generator_powerCapacity"), UI_FloatRange(stepIncrement = 0.5f, maxValue = 100f, minValue = 0.5f)]
+        public float powerCapacity = 100;
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, isPersistant = true, guiActive = true, guiName = "#LOC_KSPIE_Generator_powerControl"), UI_FloatRange(stepIncrement = 1f, maxValue = 200f, minValue = 1f)]
+        public float powerPercentage = 100;
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiActiveEditor = true, guiName = "#LOC_KSPIE_Generator_maxGeneratorEfficiency", guiFormat = "P1")]
+        public double maxEfficiency;
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiName = "#LOC_KSPIE_Generator_maxUsageRatio")]
         public double powerUsageEfficiency;
-        [KSPField]
-        public double massModifier = 1;
-        [KSPField]
-        public double rawMaximumPower;
-        [KSPField(guiActive = false, guiActiveEditor = true, guiName = "#LOC_KSPIE_Generator_maxTheoreticalPower", guiFormat = "F3")]
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiActiveEditor = true, guiName = "#LOC_KSPIE_Generator_maxTheoreticalPower", guiFormat = "F2")]
         public string maximumTheoreticalPower;
-        [KSPField]
-        public double coreTemperateHotBathExponent = 0.7;
-        [KSPField]
-        public double capacityToMassExponent = 0.7;
-
-        // Debugging
-        [KSPField(guiActive = false, guiActiveEditor = true, guiName = "#LOC_KSPIE_Generator_partMass", guiUnits = " t", guiFormat = "F3")]
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiActiveEditor = true, guiFormat = "F2", guiName = "#LOC_KSPIE_Generator_radius", guiUnits = " m")]
+        public double radius = 2.5;
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiActiveEditor = true, guiName = "#LOC_KSPIE_Generator_partMass", guiUnits = " t", guiFormat = "F3")]
         public float partMass;
-        [KSPField]
-        public double targetMass;
-        [KSPField]
-        public double initialMass;
-        [KSPField]
-        public double megajouleBarRatio;
-        [KSPField]
-        public double megajoulePecentage;
-
-        // GUI
-        [KSPField]
-        public double rawThermalPower;
-        [KSPField]
-        public double rawChargedPower;
-        [KSPField]
-        public double rawReactorPower;
-        [KSPField]
-        public double maxThermalPower;
-        [KSPField]
-        public double effectiveMaximumThermalPower;
-        [KSPField]
-        public double maxChargedPowerForThermalGenerator;
-        [KSPField]
-        public double maxChargedPowerForChargedGenerator;
-        [KSPField]
-        public double maxAllowedChargedPower;
-        [KSPField]
-        public double maxReactorPower;
-        [KSPField]
-        public double potentialThermalPower;
-        [KSPField]
-        public double attachedPowerSourceRatio;
-        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_Generator_currentElectricPower", guiUnits = " MW_e", guiFormat = "F3")]
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiName = "#LOC_KSPIE_Generator_currentElectricPower", guiUnits = " MW_e", guiFormat = "F2")]
         public string OutputPower;
-
-        [KSPField(guiActive = false, guiName = "Maximum Electric Power")]
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiName = "#LOC_KSPIE_Generator_MaximumElectricPower")]//Maximum Electric Power
         public string MaxPowerStr;
-        [KSPField(guiActive = true, guiName = "Electric Efficiency")]
-        public string OverallEfficiency;
-        [KSPField]
-        public string upgradeCostStr = "";
-        [KSPField]
-        public double coldBathTemp = 500;
-        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_Generator_coldBathTemp", guiUnits = " K", guiFormat = "F1")]
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiName = "#LOC_KSPIE_Generator_ElectricEfficiency")]//Electric Efficiency
+        public string overallEfficiencyStr;
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiName = "#LOC_KSPIE_Generator_coldBathTemp", guiUnits = " K", guiFormat = "F0")]
         public double coldBathTempDisplay = 500;
-        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_Generator_hotBathTemp", guiUnits = " K", guiFormat = "F1")]
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiName = "#LOC_KSPIE_Generator_hotBathTemp", guiUnits = " K", guiFormat = "F0")]
         public double hotBathTemp = 300;
-        [KSPField(guiActive = false, guiName = "#LOC_KSPIE_Generator_electricPowerNeeded", guiUnits = " MW", guiFormat = "F3")]
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiName = "#LOC_KSPIE_Generator_electricPowerNeeded", guiUnits = "#LOC_KSPIE_Reactor_megawattUnit", guiFormat = "F3", guiActive = true)]
         public double electrical_power_currently_needed;
-
-        // Debug
-        [KSPField]
-        public double maximumElectricPower;
-        [KSPField]
-        public double stableMaximumReactorPower;
-        [KSPField]
-        public double megawattBufferAmount;
-        [KSPField]
-        public double heat_exchanger_thrust_divisor;
-        [KSPField]
-        public double requested_power_per_second;
-        [KSPField]
-        public double received_power_per_second;
-        [KSPField]
-        public double post_received_power_per_second;
-
-        [KSPField]
-        public double spareResourceCapacity;
-        [KSPField]
-        public double possibleSpareResourceCapacityFilling;
-        [KSPField]
-        public double currentUnfilledResourceDemand;
-        [KSPField]
-        public double effectiveInputPowerPerSecond;
-        [KSPField]
-        public double postEffectiveInputPowerPerSecond;
-        [KSPField]
-        public double powerBufferBonus;
-        [KSPField]
-        public double minimumBufferSize = 0;
-        [KSPField]
-        public double stablePowerForBuffer;
-        [KSPField]
-        public double maxStableMegaWattPower;
-        [KSPField(guiName = "Applies balancing")]
-        public bool applies_balance;
-        [KSPField]
-        public double thermalPowerCurrentlyNeededForElectricity;
-        [KSPField]
-        public double effectiveThermalPowerNeededForElectricity;
-        [KSPField]
-        public double thermalPowerRequested;
-        [KSPField]
-        public double reactorPowerRequested;
-        [KSPField]
-        public double attachedPowerSourceMaximumThermalPowerUsageRatio;
-
-        [KSPField]
-        public double initialThermalPowerReceived;
-        [KSPField]
-        public double thermalPowerReceived;
-        [KSPField]
-        public double chargedPowerReceived;
-        [KSPField]
-        public double totalPowerReceived;
-        [KSPField]
-        public double overheatingModifier;
-        [KSPField]
-        public double requestedChargedPower;
-        [KSPField]
-        public double requestedThermalPower;
-
-        [KSPField]
-        public double finalRequest;
-
-        [KSPField]
-        public double requestedPostChargedPower;
-        [KSPField]
-        public double requestedPostThermalPower;
-        [KSPField]
-        public double requestedPostReactorPower;
-
-        [KSPField]
-        public double postThermalPowerReceived;
-        [KSPField]
-        public double postChargedPowerReceived;
-        [KSPField]
-        public double thermalPowerRequestRatio;
-
-        [KSPField]
-        public double effectiveMaxThermalPowerRatio;
-        [KSPField]
-        public double electricdtps;
-        [KSPField]
-        public double maxElectricdtps;
-        [KSPField]
-        public bool shouldUseChargedPower;
-        [KSPField]
-        public double _totalEff;
-        [KSPField]
-        public double capacityRatio;
-        [KSPField(guiActiveEditor = true, guiActive = false, guiName = "Offscreen Power Generation", guiUnits = " kW")]
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiActiveEditor = true, guiName = "#LOC_KSPIE_Generator_InitialGeneratorPowerEC", guiUnits = " kW", guiFormat = "F0")]
         public double initialGeneratorPowerEC;
-        [KSPField]
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiActiveEditor = true, guiName = "Maximum Generator Power", guiUnits = " Mw", guiFormat = "F3")]
         public double maximumGeneratorPowerMJ;
-        [KSPField]
-        public double currentPowerForGeneratorMJ;
-        [KSPField]
-        public double maximumGeneratorPowerEC;
+        [KSPField(groupName = GROUP, groupDisplayName = GROUP_TITLE, guiName = "Received Power Per Second", guiUnits = " Mw")]
+        public double received_power_per_second;
 
-        // Internal
-        protected double outputPower;
-        protected double powerDownFraction;
+        // privates
 
-        protected bool play_down = true;
-        protected bool play_up = true;
-        protected bool hasrequiredupgrade = false;
+        private bool _shouldUseChargedPower;
+        private bool _playPowerDownSound = true;
+        private bool _playPowerUpSound = true;
+        private bool _hasRequiredUpgrade;
+        private bool _checkedConnectivity;
 
-        protected int partDistance;
-        protected int shutdown_counter = 0;
-        protected int startcount = 0;
+        private double _targetMass;
+        private double _initialMass;
+        private double _chargedPowerReceived;
+        private double _maxReactorPower;
+        private double _megawattBufferAmount;
+        private double _hotColdBathRatio;
+        private double _heatExchangerThrustDivisor = 1;
+        private double _requestedPostReactorPower;
+        private double _electricPowerPerSecond;
+        private double _outputPower;
+        private double _powerDownFraction;
 
+        [KSPField(advancedTweakable = true, guiActive = false, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public bool _appliesBalance;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _requestedPostThermalPower;
+        [KSPField(advancedTweakable = true, guiActive = false, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _postEffectiveInputPowerPerSecond;
+        [KSPField(advancedTweakable = true, guiActive = false, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _maxElectricPowerPerSecond;
+        [KSPField(advancedTweakable = true, guiActive = false, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _totalEfficiency;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _powerNeededForCurrentEfficiency;
+        [KSPField(advancedTweakable = true, guiActive = false, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _requestedChargedPower;
+        [KSPField(advancedTweakable = true, guiActive = false, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _maximumChargedPower;
+        [KSPField(advancedTweakable = true, guiActive = false, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _chargedPowerRequestRatio;
+        [KSPField(advancedTweakable = true, guiActive = false, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _megajoulesFraction;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _reactorPowerRequested;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _maxThermalPower;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _effectiveMaximumThermalPower;
+        [KSPField(advancedTweakable = true, guiActive = false, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _maxStableMegaWattPower;
+        [KSPField(advancedTweakable = true, guiActive = false, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _maxChargedPowerForThermalGenerator;
+        [KSPField(advancedTweakable = true, guiActive = false, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _maxChargedPowerForChargedGenerator;
+        [KSPField(advancedTweakable = true, guiActive = false, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _maxAllowedChargedPower;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _thermalPowerPlanned;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _effectiveMaxThermalPowerRatio;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _requestedThermalPower;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _thermalPowerReceived;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _thermalPowerRequestRatio;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _secondThermalRequest;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _requestedPostChargedPower;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _maxUnfilledDemand;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _possibleSpareCapacity;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _maximumElectricPower;
+        [KSPField(advancedTweakable = true, guiActive = true, groupName = "Debug", groupDisplayName = "Debug", groupStartCollapsed = true)] public double _attachedMaxThermalUsageRatio;
+
+        private Animation _animation;
         private PowerStates _powerState;
-        private IFNPowerSource attachedPowerSource;
+        private IFNPowerSource _attachedPowerSource;
+        private ResourceBuffers _resourceBuffers;
+        private ModuleGenerator _stockModuleGenerator;
+        private MethodInfo _powerGeneratorReliablityEvent;
+        private ModuleResource _outputModuleResource;
+        private PartModule _powerGeneratorProcessController;
+        private BaseField _powerGeneratorCapacity;
+        private BaseField _moduleGeneratorEfficientBaseField;
+        private BaseEvent _moduleGeneratorShutdownBaseEvent;
+        private BaseEvent _moduleGeneratorActivateBaseEvent;
 
-        private Animation anim;
-        private Queue<double> averageRadiatorTemperatureQueue = new Queue<double>();
+        private readonly Queue<double> _powerDemandQueue = new Queue<double>();
 
-        private ResourceBuffers resourceBuffers;
-        private ModuleGenerator stockModuleGenerator;
-        private ModuleResource mockInputResource;
-        private ModuleResource outputModuleResource;
-        private BaseEvent moduleGeneratorShutdownBaseEvent;
-        private BaseEvent moduleGeneratorActivateBaseEvent;
-        private BaseField moduleGeneratorEfficienctBaseField;
+        public IFNPowerSource AttachedPowerSource => _attachedPowerSource;
 
-        public String UpgradeTechnology { get { return upgradeTechReq; } }
+        public string UpgradeTechnology => upgradeTechReq;
 
-        [KSPEvent(guiActive = true, guiName = "#LOC_KSPIE_Generator_activateGenerator", active = true)]
+        [KSPEvent(groupName = GROUP, guiActive = true, guiName = "Reset", active = true, guiActiveUncommand = true, guiActiveUnfocused = true)]
+        public void Reset()
+        {
+            _powerGeneratorCapacity?.SetValue(0, _powerGeneratorProcessController);
+
+            _powerGeneratorReliablityEvent?.Invoke(_powerGeneratorProcessController, new object[] { false });
+        }
+
+
+        [KSPEvent(groupName = GROUP, guiActive = true, guiName = "#LOC_KSPIE_Generator_activateGenerator", active = true)]
         public void ActivateGenerator()
         {
             IsEnabled = true;
         }
 
-        [KSPEvent(guiActive = true, guiName = "#LOC_KSPIE_Generator_deactivateGenerator", active = false)]
+        [KSPEvent(groupName = GROUP, guiActive = true, guiName = "#LOC_KSPIE_Generator_deactivateGenerator", active = false)]
         public void DeactivateGenerator()
         {
             IsEnabled = false;
         }
 
-        [KSPEvent(guiActive = true, guiName = "#LOC_KSPIE_Generator_retrofitGenerator", active = true)]
+        [KSPEvent(groupName = GROUP, guiActive = true, guiName = "#LOC_KSPIE_Generator_retrofitGenerator", active = true)]
         public void RetrofitGenerator()
         {
             if (ResearchAndDevelopment.Instance == null) return;
 
-            if (isupgraded || ResearchAndDevelopment.Instance.Science < upgradeCost) return;
+            if (isUpgraded || ResearchAndDevelopment.Instance.Science < upgradeCost) return;
 
             upgradePartModule();
             ResearchAndDevelopment.Instance.AddScience(-upgradeCost, TransactionReasons.RnDPartPurchase);
@@ -390,24 +250,19 @@ namespace FNPlugin
             IsEnabled = !IsEnabled;
         }
 
-        public virtual void OnRescale(TweakScale.ScalingFactor factor)
+        public virtual void OnRescale(ScalingFactor factor)
         {
-            try
-            {
-                Debug.Log("FNGenerator.OnRescale called with " + factor.absolute.linear);
-                storedMassMultiplier = Math.Pow((double)(decimal)factor.absolute.linear, 3);
-                initialMass = (double)(decimal)part.prefabMass * storedMassMultiplier;
-                UpdateModuleGeneratorOutput();
-            }
-            catch (Exception e)
-            {
-                Debug.LogError("[KSPI]: FNGenerator.OnRescale " + e.Message);
-            }
+            Debug.Log("[KSPI]: FNGenerator.OnRescale called with " + factor.absolute.linear);
+            storedMassMultiplier = Math.Pow((double) (decimal) factor.absolute.linear, 3);
+            _initialMass = (double) (decimal) part.prefabMass * storedMassMultiplier;
+
+            UpdateHeatExchangedThrustDivisor();
+            UpdateModuleGeneratorOutput();
         }
 
         public void Refresh()
         {
-            Debug.Log("FNGenerator Refreshed");
+            Debug.Log("[KSPI]: FNGenerator Refreshed");
             UpdateTargetMass();
         }
 
@@ -421,14 +276,14 @@ namespace FNPlugin
             if (!calculatedMass)
                 return 0;
 
-            var moduleMassDelta = (float)(targetMass - initialMass);
+            var moduleMassDelta = (float)(_targetMass - _initialMass);
 
             return moduleMassDelta;
         }
 
         public void upgradePartModule()
         {
-            isupgraded = true;
+            isUpgraded = true;
         }
 
         /// <summary>
@@ -454,14 +309,14 @@ namespace FNPlugin
         {
             try
             {
-                if (attachedPowerSource == null)
+                if (_attachedPowerSource == null)
                     return;
 
                 Debug.Log("[KSPI]: detach " + part.partInfo.title);
-                if (chargedParticleMode && attachedPowerSource.ConnectedChargedParticleElectricGenerator != null)
-                    attachedPowerSource.ConnectedChargedParticleElectricGenerator = null;
-                if (!chargedParticleMode && attachedPowerSource.ConnectedThermalElectricGenerator != null)
-                    attachedPowerSource.ConnectedThermalElectricGenerator = null;
+                if (chargedParticleMode && _attachedPowerSource.ConnectedChargedParticleElectricGenerator != null)
+                    _attachedPowerSource.ConnectedChargedParticleElectricGenerator = null;
+                if (!chargedParticleMode && _attachedPowerSource.ConnectedThermalElectricGenerator != null)
+                    _attachedPowerSource.ConnectedThermalElectricGenerator = null;
             }
             catch (Exception e)
             {
@@ -479,44 +334,56 @@ namespace FNPlugin
             }
             catch (Exception e)
             {
-                Debug.LogError("[KSPI]: Exception on " + part.name + " durring FNGenerator.OnDestroyed with message " + e.Message);
+                Debug.LogError("[KSPI]: Exception on " + part.name + " during FNGenerator.OnDestroyed with message " + e.Message);
             }
         }
 
-        public override void OnStart(PartModule.StartState state)
+        public override void OnStart(StartState state)
         {
             ConnectToModuleGenerator();
 
-            String[] resources_to_supply = { ResourceManager.FNRESOURCE_MEGAJOULES, ResourceManager.FNRESOURCE_WASTEHEAT, ResourceManager.FNRESOURCE_THERMALPOWER, ResourceManager.FNRESOURCE_CHARGED_PARTICLES };
-            this.resources_to_supply = resources_to_supply;
+            resourcesToSupply = new[] { ResourceSettings.Config.ElectricPowerInMegawatt, ResourceSettings.Config.WasteHeatInMegawatt, ResourceSettings.Config.ThermalPowerInMegawatt, ResourceSettings.Config.ChargedPowerInMegawatt };
 
-            resourceBuffers = new ResourceBuffers();
-            resourceBuffers.AddConfiguration(new ResourceBuffers.TimeBasedConfig(ResourceManager.FNRESOURCE_WASTEHEAT, wasteHeatMultiplier, 2.0e+5, true));
-            resourceBuffers.AddConfiguration(new ResourceBuffers.TimeBasedConfig(ResourceManager.FNRESOURCE_MEGAJOULES));
-            resourceBuffers.AddConfiguration(new ResourceBuffers.TimeBasedConfig(ResourceManager.STOCK_RESOURCE_ELECTRICCHARGE, 1000 / powerOutputMultiplier));
-            resourceBuffers.UpdateVariable(ResourceManager.FNRESOURCE_WASTEHEAT, this.part.mass);
-            resourceBuffers.Init(this.part);
+            if (useResourceBuffers)
+            {
+                _resourceBuffers = new ResourceBuffers();
+
+                _resourceBuffers.AddConfiguration(new ResourceBuffers.TimeBasedConfig(ResourceSettings.Config.ElectricPowerInMegawatt));
+
+                if(!Kerbalism.IsLoaded)
+                    _resourceBuffers.AddConfiguration(new ResourceBuffers.TimeBasedConfig(ResourceSettings.Config.ElectricPowerInKilowatt, 1000 / powerOutputMultiplier));
+
+                if (controlWasteHeatBuffer)
+                {
+                    _resourceBuffers.AddConfiguration(new WasteHeatBufferConfig(wasteHeatMultiplier, baseHeatAmount, true));
+                    _resourceBuffers.UpdateVariable(ResourceSettings.Config.WasteHeatInMegawatt, part.mass);
+                }
+
+                _resourceBuffers.Init(part);
+            }
 
             base.OnStart(state);
 
             var prefabMass = (double)(decimal)part.prefabMass;
-            targetMass = prefabMass * storedMassMultiplier;
-            initialMass = prefabMass * storedMassMultiplier;
+            _targetMass = prefabMass * storedMassMultiplier;
+            _initialMass = prefabMass * storedMassMultiplier;
 
-            if (initialMass == 0)
-                initialMass = prefabMass;
-            if (targetMass == 0)
-                targetMass = prefabMass;
+            if (_initialMass == 0)
+                _initialMass = prefabMass;
+            if (_targetMass == 0)
+                _targetMass = prefabMass;
 
             InitializeEfficiency();
 
             var powerCapacityField = Fields["powerCapacity"];
-            powerCapacityField.guiActiveEditor = !isLimitedByMinThrotle;
+            powerCapacityField.guiActiveEditor = !isLimitedByMinThrottle;
 
-            var powerCapacityFloatRange = powerCapacityField.uiControlEditor as UI_FloatRange;
-            powerCapacityFloatRange.maxValue = powerCapacityMaxValue;
-            powerCapacityFloatRange.minValue = powerCapacityMinValue;
-            powerCapacityFloatRange.stepIncrement = powerCapacityStepIncrement;
+            if (powerCapacityField.uiControlEditor is UI_FloatRange powerCapacityFloatRange)
+            {
+                powerCapacityFloatRange.maxValue = powerCapacityMaxValue;
+                powerCapacityFloatRange.minValue = powerCapacityMinValue;
+                powerCapacityFloatRange.stepIncrement = powerCapacityStepIncrement;
+            }
 
             if (state  == StartState.Editor)
             {
@@ -524,16 +391,16 @@ namespace FNPlugin
                 powerCapacity = Math.Min(powerCapacityMaxValue, powerCapacity);
             }
 
-            Fields["partMass"].guiActive = Fields["partMass"].guiActiveEditor = calculatedMass;
-            Fields["powerPercentage"].guiActive = Fields["powerPercentage"].guiActiveEditor = showSpecialisedUI;
-            Fields["radius"].guiActiveEditor = showSpecialisedUI;
+            Fields[nameof(partMass)].guiActive = Fields[nameof(partMass)].guiActiveEditor = calculatedMass;
+            Fields[nameof(powerPercentage)].guiActive = Fields[nameof(powerPercentage)].guiActiveEditor = showSpecialisedUI;
+            Fields[nameof(radius)].guiActiveEditor = showSpecialisedUI;
 
             if (state == StartState.Editor)
             {
                 if (this.HasTechsRequiredToUpgrade())
                 {
-                    isupgraded = true;
-                    hasrequiredupgrade = true;
+                    isUpgraded = true;
+                    _hasRequiredUpgrade = true;
                     upgradePartModule();
                 }
                 part.OnEditorAttach += OnEditorAttach;
@@ -548,30 +415,30 @@ namespace FNPlugin
             }
 
             if (this.HasTechsRequiredToUpgrade())
-                hasrequiredupgrade = true;
+                _hasRequiredUpgrade = true;
 
-            // only force activate if no certain partmodules are not present and not limited by minimum throtle
-            if (!isLimitedByMinThrotle && part.FindModuleImplementing<BeamedPowerReceiver>() == null && part.FindModuleImplementing<InterstellarReactor>() == null)
+            // only force activate if no certain part modules are not present and not limited by minimum throttle
+            if (!isLimitedByMinThrottle && part.FindModuleImplementing<BeamedPowerReceiver>() == null && part.FindModuleImplementing<InterstellarReactor>() == null)
             {
                 Debug.Log("[KSPI]: Generator on " + part.name + " was Force Activated");
                 part.force_activate();
             }
 
-            anim = part.FindModelAnimators(animName).FirstOrDefault();
-            if (anim != null)
+            _animation = part.FindModelAnimators(animName).FirstOrDefault();
+            if (_animation != null)
             {
-                anim[animName].layer = 1;
+                _animation[animName].layer = 1;
                 if (!IsEnabled)
                 {
-                    anim[animName].normalizedTime = 1;
-                    anim[animName].speed = -1;
+                    _animation[animName].normalizedTime = 1;
+                    _animation[animName].speed = -1;
                 }
                 else
                 {
-                    anim[animName].normalizedTime = 0;
-                    anim[animName].speed = 1;
+                    _animation[animName].normalizedTime = 0;
+                    _animation[animName].speed = 1;
                 }
-                anim.Play();
+                _animation.Play();
             }
 
             if (generatorInit == false)
@@ -579,12 +446,27 @@ namespace FNPlugin
                 IsEnabled = true;
             }
 
-            if (isupgraded)
+            if (isUpgraded)
                 upgradePartModule();
 
             FindAndAttachToPowerSource();
 
+            AdjustPowerPercentage();
+
             UpdateHeatExchangedThrustDivisor();
+        }
+
+        private void AdjustPowerPercentage()
+        {
+            // adjust power percentage to for recharging to buffer
+            if (hasAdjustPowerPercentage) return;
+
+            if (_attachedPowerSource == null) return;
+
+            if ( Math.Abs(powerPercentage - 100) < 0.1)
+                powerPercentage = _attachedPowerSource.DefaultPowerGeneratorPercentage;
+
+            hasAdjustPowerPercentage = true;
         }
 
         private void ConnectToModuleGenerator()
@@ -592,64 +474,60 @@ namespace FNPlugin
             if (maintainsMegaWattPowerBuffer == false)
                 return;
 
-            stockModuleGenerator = part.FindModuleImplementing<ModuleGenerator>();
-
-            if (stockModuleGenerator != null)
+            foreach (var partModule in part.Modules)
             {
-                outputModuleResource = stockModuleGenerator.resHandler.outputResources.FirstOrDefault(m => m.name == ResourceManager.STOCK_RESOURCE_ELECTRICCHARGE);
-
-                if (outputModuleResource != null)
-                {
-                    moduleGeneratorShutdownBaseEvent = stockModuleGenerator.Events["Shutdown"];
-                    if (moduleGeneratorShutdownBaseEvent != null)
-                    {
-                        moduleGeneratorShutdownBaseEvent.guiActive = false;
-                        moduleGeneratorShutdownBaseEvent.guiActiveEditor = false;
-                    }
-
-                    moduleGeneratorActivateBaseEvent = stockModuleGenerator.Events["Activate"];
-                    if (moduleGeneratorActivateBaseEvent != null)
-                    {
-                        moduleGeneratorActivateBaseEvent.guiActive = false;
-                        moduleGeneratorActivateBaseEvent.guiActiveEditor = false;
-                    }
-
-                    moduleGeneratorEfficienctBaseField = stockModuleGenerator.Fields["efficiency"];
-                    if (moduleGeneratorEfficienctBaseField != null)
-                    {
-                        moduleGeneratorEfficienctBaseField.guiActive = false;
-                        moduleGeneratorEfficienctBaseField.guiActiveEditor = false;
-                    }                    
-
-                    initialGeneratorPowerEC = outputModuleResource.rate;
-
-                    if (maximumGeneratorPowerEC > 0)
-                        outputModuleResource.rate = maximumGeneratorPowerEC;
-
-                    maximumGeneratorPowerEC = outputModuleResource.rate;
-                    maximumGeneratorPowerMJ = maximumGeneratorPowerEC / 1000;
-
-                    mockInputResource = new ModuleResource();
-                    mockInputResource.name = outputModuleResource.name;
-                    mockInputResource.id = outputModuleResource.name.GetHashCode();
-
-                    stockModuleGenerator.resHandler.inputResources.Add(mockInputResource);
-                }
+                if (partModule.ClassName != "ProcessController") continue;
+                var tittleField = partModule.Fields["title"];
+                if (tittleField == null) continue;
+                var title = (string) tittleField.GetValue(partModule);
+                if (title != "Power Generator") continue;
+                _powerGeneratorProcessController = partModule;
+                var type = _powerGeneratorProcessController.GetType();
+                _powerGeneratorReliablityEvent =  type.GetMethod("ReliablityEvent");
+                _powerGeneratorCapacity = _powerGeneratorProcessController.Fields["capacity"];
+                break;
             }
+
+            _stockModuleGenerator = part.FindModuleImplementing<ModuleGenerator>();
+
+            if (_stockModuleGenerator == null) return;
+
+            _outputModuleResource = _stockModuleGenerator.resHandler.outputResources.FirstOrDefault(m => m.name == ResourceSettings.Config.ElectricPowerInKilowatt);
+
+            if (_outputModuleResource == null) return;
+
+            _moduleGeneratorShutdownBaseEvent = _stockModuleGenerator.Events[nameof(ModuleGenerator.Shutdown)];
+            if (_moduleGeneratorShutdownBaseEvent != null)
+            {
+                _moduleGeneratorShutdownBaseEvent.guiActive = false;
+                _moduleGeneratorShutdownBaseEvent.guiActiveEditor = false;
+            }
+
+            _moduleGeneratorActivateBaseEvent = _stockModuleGenerator.Events[nameof(ModuleGenerator.Activate)];
+            if (_moduleGeneratorActivateBaseEvent != null)
+            {
+                _moduleGeneratorActivateBaseEvent.guiActive = false;
+                _moduleGeneratorActivateBaseEvent.guiActiveEditor = false;
+            }
+
+            _moduleGeneratorEfficientBaseField = _stockModuleGenerator.Fields[nameof(ModuleGenerator.efficiency)];
+            if (_moduleGeneratorEfficientBaseField != null)
+            {
+                _moduleGeneratorEfficientBaseField.guiActive = false;
+                _moduleGeneratorEfficientBaseField.guiActiveEditor = false;
+            }
+
+            initialGeneratorPowerEC = _outputModuleResource.rate;
+            maximumGeneratorPowerEC = _outputModuleResource.rate;
+            maximumGeneratorPowerMJ = maximumGeneratorPowerEC / GameConstants.ecPerMJ;
         }
 
         private void InitializeEfficiency()
         {
-            if (chargedParticleMode && efficiencyMk1 == 0)
-                efficiencyMk1 = directConversionEff;
-            else if (!chargedParticleMode && efficiencyMk1 == 0)
-                efficiencyMk1 = pCarnotEff;
-
-            if (chargedParticleMode && efficiencyMk2 == 0)
-                efficiencyMk2 = upgradedDirectConversionEff;
-            else if (!chargedParticleMode && efficiencyMk2 == 0)
-                efficiencyMk2 = upgradedpCarnotEff;
-
+            if (efficiencyMk1 == 0)
+                efficiencyMk1 = 0.1;
+            if (efficiencyMk2 == 0)
+                efficiencyMk2 = efficiencyMk1;
             if (efficiencyMk3 == 0)
                 efficiencyMk3 = efficiencyMk2;
             if (efficiencyMk4 == 0)
@@ -665,7 +543,7 @@ namespace FNPlugin
             if (efficiencyMk9 == 0)
                 efficiencyMk9 = efficiencyMk8;
 
-            if (String.IsNullOrEmpty(Mk2TechReq))
+            if (string.IsNullOrEmpty(Mk2TechReq))
                 Mk2TechReq = upgradeTechReq;
 
             int techLevel = 1;
@@ -707,27 +585,25 @@ namespace FNPlugin
         }
 
         /// <summary>
-        /// Finds the nearest avialable thermalsource and update effective part mass
+        /// Finds the nearest available thermalsource and update effective part mass
         /// </summary>
         public void FindAndAttachToPowerSource()
         {
-            partDistance = 0;
-
             // disconnect
-            if (attachedPowerSource != null)
+            if (_attachedPowerSource != null)
             {
                 if (chargedParticleMode)
-                    attachedPowerSource.ConnectedChargedParticleElectricGenerator = null;
+                    _attachedPowerSource.ConnectedChargedParticleElectricGenerator = null;
                 else
-                    attachedPowerSource.ConnectedThermalElectricGenerator = null;
+                    _attachedPowerSource.ConnectedThermalElectricGenerator = null;
             }
 
             // first look if part contains an thermal source
-            attachedPowerSource = part.FindModulesImplementing<IFNPowerSource>().FirstOrDefault();
-            if (attachedPowerSource != null)
+            _attachedPowerSource = part.FindModulesImplementing<IFNPowerSource>().FirstOrDefault();
+            if (_attachedPowerSource != null)
             {
                 ConnectToPowerSource();
-                Debug.Log("[KSPI]: Found power source localy");
+                Debug.Log("[KSPI]: Found power source locally");
                 return;
             }
 
@@ -739,12 +615,12 @@ namespace FNPlugin
             }
 
             Debug.Log("[KSPI]: generator is currently connected to " + part.attachNodes.Count + " parts");
-            // otherwise look for other non selfcontained thermal sources that is not already connected
+            // otherwise look for other non self contained thermal sources that is not already connected
 
-            var searchResult = chargedParticleMode 
+            var searchResult = chargedParticleMode
                 ? FindChargedParticleSource()
-                : isMHD 
-                    ? FindPlasmaPowerSource() 
+                : isMHD
+                    ? FindPlasmaPowerSource()
                     : FindThermalPowerSource();
 
             // quit if we failed to find anything
@@ -755,7 +631,7 @@ namespace FNPlugin
             }
 
             // verify cost is not higher than 1
-            partDistance = (int)Math.Max(Math.Ceiling(searchResult.Cost), 0);
+            var partDistance = (int)Math.Max(Math.Ceiling(searchResult.Cost), 0);
             if (partDistance > 1)
             {
                 Debug.LogWarning("[KSPI]: Found power source but at too high cost");
@@ -763,9 +639,9 @@ namespace FNPlugin
             }
 
             // update attached thermalsource
-            attachedPowerSource = searchResult.Source;
+            _attachedPowerSource = searchResult.Source;
 
-            Debug.Log("[KSPI]: succesfully connected to " + attachedPowerSource.Part.partInfo.title);
+            Debug.Log("[KSPI]: successfully connected to " + _attachedPowerSource.Part.partInfo.title);
 
             ConnectToPowerSource();
         }
@@ -774,35 +650,43 @@ namespace FNPlugin
         {
             //connect with source
             if (chargedParticleMode)
-                attachedPowerSource.ConnectedChargedParticleElectricGenerator = this;
+                _attachedPowerSource.ConnectedChargedParticleElectricGenerator = this;
             else
-                attachedPowerSource.ConnectedThermalElectricGenerator = this;
+                _attachedPowerSource.ConnectedThermalElectricGenerator = this;
 
             UpdateTargetMass();
+
+            UpdateHeatExchangedThrustDivisor();
 
             UpdateModuleGeneratorOutput();
         }
 
         private void UpdateModuleGeneratorOutput()
         {
-            if (attachedPowerSource == null || outputModuleResource == null)
+            if (_attachedPowerSource == null)
                 return;
 
-            var maximumPower = isLimitedByMinThrotle ? attachedPowerSource.MinimumPower : attachedPowerSource.MaximumPower;
+            var maximumPower = isLimitedByMinThrottle ? _attachedPowerSource.MinimumPower : _attachedPowerSource.MaximumPower;
+            maximumGeneratorPowerMJ = maximumPower * maxEfficiency * _heatExchangerThrustDivisor;
 
-            if (chargedParticleMode)
-                maximumGeneratorPowerMJ = maximumPower * maxEfficiency;
+            var generatorRate = maximumGeneratorPowerMJ * GameConstants.ecPerMJ;
+
+            if (_outputModuleResource != null)
+                _outputModuleResource.rate = maximumGeneratorPowerMJ * GameConstants.ecPerMJ;
             else
-                maximumGeneratorPowerMJ = maximumPower * maxEfficiency * 0.6;
-
-            outputModuleResource.rate = maximumGeneratorPowerMJ * 1000;
+            {
+                if (HighLogic.LoadedSceneIsFlight)
+                    _powerGeneratorCapacity?.SetValue(0, _powerGeneratorProcessController);
+                else
+                    _powerGeneratorCapacity?.SetValue(generatorRate, _powerGeneratorProcessController);
+            }
         }
 
         private PowerSourceSearchResult FindThermalPowerSource()
         {
             var searchResult =
-                PowerSourceSearchResult.BreadthFirstSearchForThermalSource(part, 
-                    p => p.IsThermalSource && p.ConnectedThermalElectricGenerator == null && p.ThermalEnergyEfficiency > 0, 
+                PowerSourceSearchResult.BreadthFirstSearchForThermalSource(part,
+                    p => p.IsThermalSource && p.ConnectedThermalElectricGenerator == null && p.ThermalEnergyEfficiency > 0,
                     3, 3, 3, true);
             return searchResult;
         }
@@ -811,7 +695,7 @@ namespace FNPlugin
         {
             var searchResult =
                 PowerSourceSearchResult.BreadthFirstSearchForThermalSource(part,
-                     p => p.IsThermalSource && p.ConnectedChargedParticleElectricGenerator == null && p.PlasmaEnergyEfficiency > 0, 
+                     p => p.IsThermalSource && p.ConnectedChargedParticleElectricGenerator == null && p.PlasmaEnergyEfficiency > 0,
                      3, 3, 3, true);
             return searchResult;
         }
@@ -820,7 +704,7 @@ namespace FNPlugin
         {
             var searchResult =
                 PowerSourceSearchResult.BreadthFirstSearchForThermalSource(part,
-                     p => p.IsThermalSource && p.ConnectedChargedParticleElectricGenerator == null && p.ChargedParticleEnergyEfficiency > 0, 
+                     p => p.IsThermalSource && p.ConnectedChargedParticleElectricGenerator == null && p.ChargedParticleEnergyEfficiency > 0,
                      3, 3, 3, true);
             return searchResult;
         }
@@ -829,36 +713,36 @@ namespace FNPlugin
         {
             try
             {
-                if (attachedPowerSource == null)
+                if (_attachedPowerSource == null)
                 {
-                    targetMass = initialMass;
+                    _targetMass = _initialMass;
                     return;
                 }
 
-                if (chargedParticleMode && attachedPowerSource.ChargedParticleEnergyEfficiency > 0)
-                    powerUsageEfficiency = attachedPowerSource.ChargedParticleEnergyEfficiency;
-                else if (isMHD && attachedPowerSource.PlasmaEnergyEfficiency > 0)
-                    powerUsageEfficiency = attachedPowerSource.PlasmaEnergyEfficiency;
-                else if (attachedPowerSource.ThermalEnergyEfficiency > 0)
-                    powerUsageEfficiency = attachedPowerSource.ThermalEnergyEfficiency;
+                if (chargedParticleMode && _attachedPowerSource.ChargedParticleEnergyEfficiency > 0)
+                    powerUsageEfficiency = _attachedPowerSource.ChargedParticleEnergyEfficiency;
+                else if (isMHD && _attachedPowerSource.PlasmaEnergyEfficiency > 0)
+                    powerUsageEfficiency = _attachedPowerSource.PlasmaEnergyEfficiency;
+                else if (_attachedPowerSource.ThermalEnergyEfficiency > 0)
+                    powerUsageEfficiency = _attachedPowerSource.ThermalEnergyEfficiency;
                 else
                     powerUsageEfficiency = 1;
 
-                rawMaximumPower = attachedPowerSource.RawMaximumPowerForPowerGeneration * powerUsageEfficiency;
-                maximumTheoreticalPower = PluginHelper.getFormattedPowerString(rawMaximumPower * CapacityRatio * maxEfficiency);
+                var rawMaximumPower = _attachedPowerSource.RawMaximumPowerForPowerGeneration * powerUsageEfficiency;
+                maximumTheoreticalPower = PluginHelper.GetFormattedPowerString(rawMaximumPower * CapacityRatio * maxEfficiency);
 
                 // verify if mass calculation is active
                 if (!calculatedMass)
                 {
-                    targetMass = initialMass;
+                    _targetMass = _initialMass;
                     return;
                 }
 
                 // update part mass
                 if (rawMaximumPower > 0 && rawPowerToMassDivider > 0)
-                    targetMass = (massModifier * attachedPowerSource.ThermalProcessingModifier * rawMaximumPower * Math.Pow(CapacityRatio, capacityToMassExponent)) / rawPowerToMassDivider;
+                    _targetMass = massModifier * _attachedPowerSource.ThermalProcessingModifier * rawMaximumPower * Math.Pow(CapacityRatio, capacityToMassExponent) / rawPowerToMassDivider;
                 else
-                    targetMass = initialMass;
+                    _targetMass = _initialMass;
             }
             catch (Exception e)
             {
@@ -866,17 +750,36 @@ namespace FNPlugin
             }
         }
 
-        public double CapacityRatio
-        {
-            get {
-                capacityRatio = (double)(decimal)powerCapacity / 100;
-                return capacityRatio;
-            }
-        }
+        public double CapacityRatio => (double)(decimal)powerCapacity * 0.01;
 
-        public double PowerRatio
+        public double PowerControlRatio => (double)(decimal)powerPercentage * 0.01;
+
+        public double GetHotBathTemperature(double coldBathTemperature)
         {
-            get { return (double)(decimal)powerPercentage / 100; }
+            if (_attachedPowerSource == null)
+                return -1;
+
+            var coreTemperature = _attachedPowerSource.GetCoreTempAtRadiatorTemp(coldBathTemperature);
+
+            var plasmaTemperature = coreTemperature <= _attachedPowerSource.HotBathTemperature
+                ? coreTemperature
+                : _attachedPowerSource.HotBathTemperature + Math.Pow(coreTemperature - _attachedPowerSource.HotBathTemperature, coreTemperateHotBathExponent);
+
+            double temperature;
+            if (!isMHD)
+                temperature = _attachedPowerSource.HotBathTemperature;
+            else
+            {
+                if (_attachedPowerSource.SupportMHD)
+                    temperature = plasmaTemperature;
+                else
+                {
+                    var chargedPowerModifier = _attachedPowerSource.ChargedPowerRatio * _attachedPowerSource.ChargedPowerRatio;
+                    temperature = plasmaTemperature * chargedPowerModifier + (1 - chargedPowerModifier) * _attachedPowerSource.HotBathTemperature; // for fusion reactors connected to MHD
+                }
+            }
+
+            return temperature;
         }
 
         /// <summary>
@@ -884,164 +787,156 @@ namespace FNPlugin
         /// </summary>
         public override void OnUpdate()
         {
-            Events["ActivateGenerator"].active = !IsEnabled && showSpecialisedUI;
-            Events["DeactivateGenerator"].active = IsEnabled && showSpecialisedUI;
-            Fields["OverallEfficiency"].guiActive = showDetailedInfo && IsEnabled;
-            Fields["MaxPowerStr"].guiActive = showDetailedInfo && IsEnabled;
-            Fields["coldBathTempDisplay"].guiActive = showDetailedInfo && !chargedParticleMode;
-            Fields["hotBathTemp"].guiActive = showDetailedInfo && !chargedParticleMode;
+            Events[nameof(ActivateGenerator)].active = !IsEnabled && showSpecialisedUI;
+            Events[nameof(DeactivateGenerator)].active = IsEnabled && showSpecialisedUI;
+            Fields[nameof(overallEfficiencyStr)].guiActive = showDetailedInfo && IsEnabled;
+            Fields[nameof(MaxPowerStr)].guiActive = showDetailedInfo && IsEnabled;
+            Fields[nameof(coldBathTempDisplay)].guiActive = showDetailedInfo && !chargedParticleMode;
+            Fields[nameof(hotBathTemp)].guiActive = showDetailedInfo && !chargedParticleMode;
+
+            if (_attachedPowerSource == null && _checkedConnectivity == false)
+            {
+                _checkedConnectivity = true;
+                var message = "Warning: " + part.partInfo.title + " is not connected to a power source!";
+                Debug.Log("[KSPI]: " + message);
+                ScreenMessages.PostScreenMessage(message, 20.0f, ScreenMessageStyle.UPPER_CENTER);
+            }
 
             if (ResearchAndDevelopment.Instance != null)
             {
-                Events["RetrofitGenerator"].active = !isupgraded && ResearchAndDevelopment.Instance.Science >= upgradeCost && hasrequiredupgrade;
+                Events[nameof(RetrofitGenerator)].active = !isUpgraded && ResearchAndDevelopment.Instance.Science >= upgradeCost && _hasRequiredUpgrade;
                 upgradeCostStr = ResearchAndDevelopment.Instance.Science.ToString("0") + " / " + upgradeCost;
             }
             else
-                Events["RetrofitGenerator"].active = false;
+                Events[nameof(RetrofitGenerator)].active = false;
 
-            if (IsEnabled)
+            if (_playPowerUpSound && _animation != null)
             {
-                if (play_up && anim != null)
-                {
-                    play_down = true;
-                    play_up = false;
-                    anim[animName].speed = 1;
-                    anim[animName].normalizedTime = 0;
-                    anim.Blend(animName, 2);
-                }
-            }
-            else
-            {
-                if (play_down && anim != null)
-                {
-                    play_down = false;
-                    play_up = true;
-                    anim[animName].speed = -1;
-                    anim[animName].normalizedTime = 1;
-                    anim.Blend(animName, 2);
-                }
+                _playPowerDownSound = IsEnabled;
+                _playPowerUpSound = !IsEnabled;
+                _animation[animName].speed = IsEnabled ? 1 : -1;
+                _animation[animName].normalizedTime = IsEnabled ? 0 : 1;
+                _animation.Blend(animName, 2);
             }
 
             if (IsEnabled)
             {
-                var percentOutputPower = _totalEff * 100.0;
-                var outputPowerReport = -outputPower;
+                OutputPower = PluginHelper.GetFormattedPowerString(-_outputPower);
+                overallEfficiencyStr = (_totalEfficiency * 100).ToString("0.00") + "%";
 
-                OutputPower = PluginHelper.getFormattedPowerString(outputPowerReport, "0.0", "0.000");
-                OverallEfficiency = percentOutputPower.ToString("0.00") + "%";
-
-                maximumElectricPower = (_totalEff >= 0)
+                _maximumElectricPower = _totalEfficiency >= 0
                     ? !chargedParticleMode
-                        ? maxThermalPower * _totalEff * PowerRatio * CapacityRatio
-                        : maxChargedPowerForThermalGenerator * _totalEff * PowerRatio * CapacityRatio
+                        ? _totalEfficiency * Math.Max(_maxChargedPowerForThermalGenerator, _maxThermalPower)
+                        : _totalEfficiency * _maxChargedPowerForChargedGenerator
                     : 0;
 
-                MaxPowerStr = PluginHelper.getFormattedPowerString(maximumElectricPower, "0.0", "0.000");
+                MaxPowerStr = PluginHelper.GetFormattedPowerString(_maximumElectricPower);
             }
             else
-                OutputPower = "Generator Offline";
-
-            if (moduleGeneratorEfficienctBaseField != null)
             {
-                moduleGeneratorEfficienctBaseField.guiActive = false;
-                moduleGeneratorEfficienctBaseField.guiActiveEditor = false;
-            }  
+                OutputPower = Localizer.Format("#LOC_KSPIE_Generator_Offline"); //"Generator Offline"
+                _maximumElectricPower = 0;
+            }
+
+            if (_moduleGeneratorEfficientBaseField != null)
+            {
+                _moduleGeneratorEfficientBaseField.guiActive = false;
+                _moduleGeneratorEfficientBaseField.guiActiveEditor = false;
+            }
         }
 
-        public double MaxStableMegaWattPower
+        public double RawGeneratorSourcePower
         {
             get
             {
-                if (attachedPowerSource == null || !IsEnabled)
+                if (_attachedPowerSource == null || !IsEnabled)
                     return 0;
 
                 var maxPowerUsageRatio =
                     chargedParticleMode
-                        ? attachedPowerSource.ChargedParticleEnergyEfficiency
+                        ? _attachedPowerSource.ChargedParticleEnergyEfficiency
                         : isMHD
-                            ? attachedPowerSource.PlasmaEnergyEfficiency
-                            : attachedPowerSource.ThermalEnergyEfficiency;
+                            ? _attachedPowerSource.PlasmaEnergyEfficiency
+                            : _attachedPowerSource.ThermalEnergyEfficiency;
 
-                stableMaximumReactorPower = isLimitedByMinThrotle ? attachedPowerSource.MinimumPower : attachedPowerSource.StableMaximumReactorPower;
+                var rawMaxPower = isLimitedByMinThrottle
+                    ? _attachedPowerSource.MinimumPower
+                    : HighLogic.LoadedSceneIsEditor
+                        ? _attachedPowerSource.MaximumPower
+                        : _attachedPowerSource.StableMaximumReactorPower;
 
-                return stableMaximumReactorPower * attachedPowerSource.PowerRatio * maxPowerUsageRatio * maxEfficiency * CapacityRatio;
+                return rawMaxPower * _attachedPowerSource.PowerRatio * maxPowerUsageRatio * CapacityRatio;
             }
-        }        
+        }
+
+        public double MaxEfficiency => maxEfficiency;
+
+        public double MaxStableMegaWattPower => RawGeneratorSourcePower * maxEfficiency ;
 
         private void UpdateHeatExchangedThrustDivisor()
         {
-            if (attachedPowerSource == null) return;
-
-            if (attachedPowerSource.Radius <= 0 || radius <= 0)
+            if (_attachedPowerSource == null || _attachedPowerSource.Radius <= 0 || radius <= 0)
             {
-                heat_exchanger_thrust_divisor = 1;
+                _heatExchangerThrustDivisor = 1;
                 return;
             }
 
-            heat_exchanger_thrust_divisor = radius > attachedPowerSource.Radius
-                ? attachedPowerSource.Radius * attachedPowerSource.Radius / radius / radius
-                : radius * radius / attachedPowerSource.Radius / attachedPowerSource.Radius;
+            _heatExchangerThrustDivisor = radius > _attachedPowerSource.Radius
+                ? _attachedPowerSource.Radius * _attachedPowerSource.Radius / radius / radius
+                : radius * radius / _attachedPowerSource.Radius / _attachedPowerSource.Radius;
         }
 
         private void UpdateGeneratorPower()
         {
-            if (attachedPowerSource == null) return;
+            if (_attachedPowerSource == null) return;
 
             if (!chargedParticleMode) // thermal or plasma mode
             {
-                var chargedPowerModifier = attachedPowerSource.ChargedPowerRatio * attachedPowerSource.ChargedPowerRatio;
+                coldBathTempDisplay = FNRadiator.GetAverageRadiatorTemperatureForVessel(vessel);
 
-                var plasmaTemperature = attachedPowerSource.CoreTemperature <= attachedPowerSource.HotBathTemperature
-                    ? attachedPowerSource.CoreTemperature
-                    : attachedPowerSource.HotBathTemperature + Math.Pow(attachedPowerSource.CoreTemperature - attachedPowerSource.HotBathTemperature, coreTemperateHotBathExponent);
+                hotBathTemp = GetHotBathTemperature(coldBathTempDisplay);
 
-                hotBathTemp = applies_balance || !isMHD
-                    ? attachedPowerSource.HotBathTemperature 
-                    : attachedPowerSource.SupportMHD
-                        ? plasmaTemperature
-                        : plasmaTemperature * chargedPowerModifier + (1 - chargedPowerModifier) * attachedPowerSource.HotBathTemperature;	// for fusion reactors connected to MHD
-
-                averageRadiatorTemperatureQueue.Enqueue(FNRadiator.getAverageRadiatorTemperatureForVessel(vessel));
-
-                while (averageRadiatorTemperatureQueue.Count > 10)
-                    averageRadiatorTemperatureQueue.Dequeue();
-
-                coldBathTempDisplay = averageRadiatorTemperatureQueue.Average();
                 coldBathTemp = coldBathTempDisplay * 0.75;
             }
 
             if (HighLogic.LoadedSceneIsEditor)
                 UpdateHeatExchangedThrustDivisor();
 
-            attachedPowerSourceRatio = attachedPowerSource.PowerRatio;
-            effectiveMaximumThermalPower = attachedPowerSource.MaximumThermalPower * PowerRatio * CapacityRatio;
+            var attachedPowerSourceRatio = _attachedPowerSource.PowerRatio;
 
-            rawThermalPower = isLimitedByMinThrotle ? attachedPowerSource.MinimumPower : effectiveMaximumThermalPower;
-            rawChargedPower = attachedPowerSource.MaximumChargedPower * PowerRatio * CapacityRatio;
-            rawReactorPower = rawThermalPower + rawChargedPower;
-            
+            var rawThermalPower = isLimitedByMinThrottle
+                ? _attachedPowerSource.MinimumPower
+                : _attachedPowerSource.MaximumThermalPower * Math.Min(1, PowerControlRatio) * CapacityRatio;
+
+            var rawChargedPower = _attachedPowerSource.MaximumChargedPower * Math.Min(1, PowerControlRatio) * CapacityRatio;
+            var rawReactorPower = rawThermalPower + rawChargedPower;
+
             if (!(attachedPowerSourceRatio > 0))
             {
-                maxChargedPowerForThermalGenerator = rawChargedPower;
-                maxThermalPower = rawThermalPower;
-                maxReactorPower = rawReactorPower;
+                _maxChargedPowerForThermalGenerator = rawChargedPower;
+                _maxThermalPower = rawThermalPower;
+                _maxReactorPower = rawReactorPower;
                 return;
             }
 
-            attachedPowerSourceMaximumThermalPowerUsageRatio = isMHD
-                ? attachedPowerSource.PlasmaEnergyEfficiency
-                : attachedPowerSource.ThermalEnergyEfficiency;
+            _attachedMaxThermalUsageRatio = isMHD
+                ? _attachedPowerSource.PlasmaEnergyEfficiency
+                : _attachedPowerSource.ThermalEnergyEfficiency;
 
-            potentialThermalPower = ((applies_balance ? rawThermalPower : rawReactorPower) / attachedPowerSourceRatio);
-            maxAllowedChargedPower = rawChargedPower * (chargedParticleMode ? attachedPowerSource.ChargedParticleEnergyEfficiency : 1);
+            //var potentialThermalPower = (isMHD || !_appliesBalance ? rawReactorPower: rawThermalPower) / attachedPowerSourceRatio;
+            //_maxAllowedChargedPower = rawChargedPower * (chargedParticleMode ? _attachedPowerSource.ChargedPowerRatio : 1);
+            _maxAllowedChargedPower = rawChargedPower;
 
-            maxThermalPower = attachedPowerSourceMaximumThermalPowerUsageRatio * Math.Min(rawReactorPower, potentialThermalPower);
-            maxChargedPowerForThermalGenerator = attachedPowerSourceMaximumThermalPowerUsageRatio    * Math.Min(rawChargedPower, (1 / attachedPowerSourceRatio) * maxAllowedChargedPower);
-            maxChargedPowerForChargedGenerator = attachedPowerSource.ChargedParticleEnergyEfficiency * Math.Min(rawChargedPower, (1 / attachedPowerSourceRatio) * maxAllowedChargedPower);
-            maxReactorPower = chargedParticleMode ? maxChargedPowerForChargedGenerator : maxThermalPower;
+            _maxThermalPower = _attachedMaxThermalUsageRatio * Math.Min(rawReactorPower, rawReactorPower / attachedPowerSourceRatio);
+            _maxChargedPowerForThermalGenerator = _attachedMaxThermalUsageRatio * Math.Min(rawChargedPower, (1 / attachedPowerSourceRatio) * _maxAllowedChargedPower);
+            _maxChargedPowerForChargedGenerator = _attachedPowerSource.ChargedParticleEnergyEfficiency * Math.Min(rawChargedPower, (1 / attachedPowerSourceRatio) * _maxAllowedChargedPower);
+
+            _maxReactorPower = chargedParticleMode || (!_attachedPowerSource.IsConnectedToChargedGenerator && _maxThermalPower == 0)
+                ? _maxChargedPowerForChargedGenerator
+                : _maxThermalPower;
         }
 
-        // Update is called in the editor 
+        // Update is called in the editor
         // ReSharper disable once UnusedMember.Global
         public void Update()
         {
@@ -1051,366 +946,410 @@ namespace FNPlugin
 
             UpdateTargetMass();
 
-            Fields["targetMass"].guiActive = attachedPowerSource != null && attachedPowerSource.Part != this.part;
+            UpdateHeatExchangedThrustDivisor();
+
+            UpdateModuleGeneratorOutput();
         }
 
         public override void OnFixedUpdateResourceSuppliable(double fixedDeltaTime)
         {
-            try
+            if (IsEnabled && _attachedPowerSource != null && FNRadiator.HasRadiatorsForVessel(vessel))
             {
-                if (IsEnabled && attachedPowerSource != null && FNRadiator.hasRadiatorsForVessel(vessel))
+                _appliesBalance = _attachedPowerSource.ShouldApplyBalance(chargedParticleMode ? ElectricGeneratorType.charged_particle : ElectricGeneratorType.thermal);
+
+                UpdateGeneratorPower();
+
+                // check if MaxStableMegaWattPower is changed
+                _maxStableMegaWattPower = MaxStableMegaWattPower;
+
+                UpdateBuffers();
+
+                generatorInit = true;
+
+                // don't produce any power when our reactor has stopped
+                if (_maxStableMegaWattPower <= 0)
                 {
-                    applies_balance = attachedPowerSource.ShouldApplyBalance(chargedParticleMode ? ElectricGeneratorType.charged_particle : ElectricGeneratorType.thermal);
+                    _electricPowerPerSecond = 0;
+                    _maxElectricPowerPerSecond = 0;
+                    PowerDown();
 
-                    UpdateGeneratorPower();
+                    return;
+                }
 
-                    // check if MaxStableMegaWattPower is changed
-                    maxStableMegaWattPower = MaxStableMegaWattPower;
+                if (_stockModuleGenerator != null)
+                    _stockModuleGenerator.generatorIsActive = _maxStableMegaWattPower > 0;
 
-                    UpdateBuffers();
+                _powerDownFraction = 1;
 
-                    generatorInit = true;
+                var wasteheatRatio = FNRadiator.GetAverageRadiatorTemperatureForVessel(vessel) / 4500;
+                var overheatingModifier = wasteheatRatio < 0.9 ? 1 : (1 - wasteheatRatio) * 10;
 
-                    // don't produce any power when our reactor has stopped
-                    if (maxStableMegaWattPower <= 0)
+                var thermalPowerRatio = 1 - _attachedPowerSource.ChargedPowerRatio;
+                var chargedPowerRatio = _attachedPowerSource.ChargedPowerRatio;
+
+
+
+                if (!chargedParticleMode) // thermal mode
+                {
+                    _hotColdBathRatio = Math.Max(Math.Min(1 - coldBathTemp / hotBathTemp, 1), 0);
+
+                    _totalEfficiency = Math.Min(maxEfficiency, _hotColdBathRatio * maxEfficiency);
+
+                    if (_hotColdBathRatio <= 0.01 || coldBathTemp <= 0 || hotBathTemp <= 0 || _maxReactorPower <= 0) return;
+
+                    electrical_power_currently_needed = CalculateElectricalPowerCurrentlyNeeded();
+
+                    _powerNeededForCurrentEfficiency = electrical_power_currently_needed / _totalEfficiency;
+
+                    _reactorPowerRequested = Math.Max(0, Math.Min(_maxReactorPower, _powerNeededForCurrentEfficiency));
+                    _requestedPostReactorPower = Math.Max(0, _attachedPowerSource.MinimumPower - _reactorPowerRequested);
+
+                    _effectiveMaxThermalPowerRatio = _attachedPowerSource.IsConnectedToChargedGenerator
+                        ? thermalPowerRatio
+                        : thermalPowerRatio + (1 - thermalPowerRatio) * (1 - Math.Max(_attachedPowerSource.RequestedChargedThrottle, _attachedPowerSource.RequestedPlasmaThrottle));
+
+                    _thermalPowerPlanned = thermalPowerRatio * Math.Max(0, Math.Min(_maxThermalPower * _effectiveMaxThermalPowerRatio, _powerNeededForCurrentEfficiency));
+
+                    _requestedPostThermalPower = Math.Max(0, _attachedPowerSource.MinimumPower * thermalPowerRatio - _thermalPowerPlanned);
+
+                    if ( chargedPowerRatio < 1)
                     {
-                        electricdtps = 0;
-                        maxElectricdtps = 0;
-                        PowerDown();
-
-                        return;
+                        _effectiveMaximumThermalPower = _attachedPowerSource.MaximumThermalPower * Math.Min(1, PowerControlRatio) * CapacityRatio * _attachedMaxThermalUsageRatio;
+                        _requestedThermalPower = Math.Min(_thermalPowerPlanned, _effectiveMaximumThermalPower);
+                        _thermalPowerReceived = ConsumeFnResourcePerSecond(_requestedThermalPower, ResourceSettings.Config.ThermalPowerInMegawatt);
+                        _thermalPowerRequestRatio = Math.Min(1, _effectiveMaximumThermalPower > 0 ? _requestedThermalPower / _effectiveMaximumThermalPower : 0);
+                        _attachedPowerSource.NotifyActiveThermalEnergyGenerator(_totalEfficiency, _thermalPowerRequestRatio, isMHD, isLimitedByMinThrottle ? part.mass * 0.05 : part.mass);
                     }
+                    else
+                        _thermalPowerReceived = 0;
 
-                    if (stockModuleGenerator != null)
-                        stockModuleGenerator.generatorIsActive = maxStableMegaWattPower > 0;
+                    var totalPowerReceived = _thermalPowerReceived;
 
-                    powerDownFraction = 1;
+                    _shouldUseChargedPower = chargedPowerRatio > 0;
 
-                    var wasteheatRatio = getResourceBarRatio(ResourceManager.FNRESOURCE_WASTEHEAT);
-                    overheatingModifier = wasteheatRatio < 0.9 ? 1 : (1 - wasteheatRatio) * 10;
-
-                    if (!chargedParticleMode) // thermal mode
+                    // Collect charged power when needed
+                    if (chargedPowerRatio >= 1)
                     {
-                        hotColdBathRatio = Math.Max(Math.Min(1 - coldBathTemp / hotBathTemp, 1), 0);
+                        _requestedChargedPower = _reactorPowerRequested;
+                        _requestedChargedPower *= 1 - Math.Max(_attachedPowerSource.CurrentChargedPropulsionRatio, _attachedPowerSource.CurrentPlasmaPropulsionRatio);
 
-                        _totalEff = Math.Min(maxEfficiency, hotColdBathRatio * maxEfficiency);
+                        _chargedPowerReceived = ConsumeFnResourcePerSecond(_requestedChargedPower, ResourceSettings.Config.ChargedPowerInMegawatt);
 
-                        if (hotColdBathRatio <= 0.01 || coldBathTemp <= 0 || hotBathTemp <= 0 || maxThermalPower <= 0)
-                        {
-                            requested_power_per_second = 0;
-                            return;
-                        }
+                        var maximumChargedPower = _attachedPowerSource.MaximumChargedPower * powerUsageEfficiency * CapacityRatio;
+                        var chargedPowerRequestRatio = Math.Min(1, maximumChargedPower > 0 ? _requestedChargedPower / maximumChargedPower : 0);
 
-                        thermalPowerCurrentlyNeededForElectricity = CalculateElectricalPowerCurrentlyNeeded();
-
-                        effectiveThermalPowerNeededForElectricity = thermalPowerCurrentlyNeededForElectricity / _totalEff;
-
-                        var availableChargedPowerRatio = Math.Max(Math.Min(2 * getResourceBarRatio(ResourceManager.FNRESOURCE_CHARGED_PARTICLES) - 0.25, 1), 0);
-
-                        reactorPowerRequested = Math.Max(0, Math.Min(maxReactorPower, effectiveThermalPowerNeededForElectricity));
-                        requestedPostReactorPower = Math.Max(0, attachedPowerSource.MinimumPower - reactorPowerRequested);
-
-                        thermalPowerRequested = Math.Max(0, Math.Min(maxThermalPower, effectiveThermalPowerNeededForElectricity));
-                        thermalPowerRequested *= applies_balance && attachedPowerSource.ChargedPowerRatio != 1 ? (1 - attachedPowerSource.ChargedPowerRatio) : 1;
-                        requestedPostThermalPower = Math.Max(0, (attachedPowerSource.MinimumPower * (1 - attachedPowerSource.ChargedPowerRatio)) - thermalPowerRequested); 
-
-                        requested_power_per_second = thermalPowerRequested;
-
-                        if (attachedPowerSource.ChargedPowerRatio != 1)
-                        {
-                            requestedThermalPower = Math.Min(thermalPowerRequested, effectiveMaximumThermalPower);
-                            initialThermalPowerReceived = consumeFNResourcePerSecond(requestedThermalPower, ResourceManager.FNRESOURCE_THERMALPOWER);
-
-                            thermalPowerRequestRatio = Math.Min(1, effectiveMaximumThermalPower > 0 ? requestedThermalPower / attachedPowerSource.MaximumThermalPower : 0);
-                            attachedPowerSource.NotifyActiveThermalEnergyGenerator(_totalEff, thermalPowerRequestRatio, isMHD, isLimitedByMinThrotle ? part.mass * 0.05 : part.mass);
-                        }
-                        else
-                            initialThermalPowerReceived = 0;
-
-                        thermalPowerReceived = initialThermalPowerReceived;
-                        totalPowerReceived = initialThermalPowerReceived;
-
-                        shouldUseChargedPower = attachedPowerSource.ChargedPowerRatio > 0;
-
-                        // Collect charged power when needed
-                        if (attachedPowerSource.ChargedPowerRatio == 1)
-                        {
-                            requestedChargedPower = reactorPowerRequested;
-
-                            chargedPowerReceived = consumeFNResourcePerSecond(requestedChargedPower, ResourceManager.FNRESOURCE_CHARGED_PARTICLES);
-
-                            var maximumChargedPower = attachedPowerSource.MaximumChargedPower * powerUsageEfficiency * CapacityRatio;
-                            var chargedPowerRequestRatio = Math.Min(1, maximumChargedPower > 0 ? thermalPowerRequested / maximumChargedPower : 0);
-
-                            attachedPowerSource.NotifyActiveThermalEnergyGenerator(_totalEff, chargedPowerRequestRatio, isMHD, isLimitedByMinThrotle ? part.mass * 0.05 : part.mass);
-                        }
-                        else if (shouldUseChargedPower && thermalPowerReceived < reactorPowerRequested)
-                        {
-                            requestedChargedPower = Math.Min(Math.Min(reactorPowerRequested - thermalPowerReceived, maxChargedPowerForThermalGenerator), Math.Max(0, maxReactorPower - thermalPowerReceived));
-                            chargedPowerReceived = consumeFNResourcePerSecond(requestedChargedPower, ResourceManager.FNRESOURCE_CHARGED_PARTICLES);
-                        }
-                        else
-                        {
-                            consumeFNResourcePerSecond(0, ResourceManager.FNRESOURCE_CHARGED_PARTICLES);
-                            chargedPowerReceived = 0;
-                            requestedChargedPower = 0;
-                        }
-
-                        totalPowerReceived += chargedPowerReceived;
-
-                        // any shortage should be consumed again from remaining thermalpower
-                        if (shouldUseChargedPower && attachedPowerSource.ChargedPowerRatio != 1 && totalPowerReceived < reactorPowerRequested)
-                        {
-                            finalRequest = Math.Max(0, reactorPowerRequested - totalPowerReceived);
-                            thermalPowerReceived += consumeFNResourcePerSecond(finalRequest, ResourceManager.FNRESOURCE_THERMALPOWER);
-                        }
+                        _attachedPowerSource.NotifyActiveThermalEnergyGenerator(_totalEfficiency, chargedPowerRequestRatio, isMHD, isLimitedByMinThrottle ? part.mass * 0.05 : part.mass);
                     }
-                    else // charged particle mode
+                    else if (_shouldUseChargedPower && _thermalPowerReceived < _reactorPowerRequested)
                     {
-                        hotColdBathRatio = 1;
+                        _requestedChargedPower = Math.Min(Math.Min(_reactorPowerRequested - _thermalPowerReceived, _maxChargedPowerForThermalGenerator), Math.Max(0, _maxReactorPower - _thermalPowerReceived));
+                        _requestedChargedPower *= 1 - Math.Max(_attachedPowerSource.CurrentChargedPropulsionRatio, _attachedPowerSource.CurrentPlasmaPropulsionRatio);
 
-                        _totalEff = maxEfficiency;
-
-                        if (_totalEff <= 0) return;
-
-                        var chargedPowerCurrentlyNeededForElectricity = CalculateElectricalPowerCurrentlyNeeded();
-
-                        requestedChargedPower = overheatingModifier * Math.Max(0, Math.Min(maxAllowedChargedPower, chargedPowerCurrentlyNeededForElectricity / _totalEff));
-                        requestedPostChargedPower = overheatingModifier * Math.Max(0, (attachedPowerSource.MinimumPower * attachedPowerSource.ChargedPowerRatio) - requestedChargedPower); 
-
-                        requested_power_per_second = requestedChargedPower;
-
-                        var maximumChargedPower = attachedPowerSource.MaximumChargedPower * attachedPowerSource.ChargedParticleEnergyEfficiency;
-                        var chargedPowerRequestRatio = Math.Min(1, maximumChargedPower > 0 ? requestedChargedPower / maximumChargedPower : 0);
-                        attachedPowerSource.NotifyActiveChargedEnergyGenerator(_totalEff, chargedPowerRequestRatio, part.mass);
-
-                        chargedPowerReceived = consumeFNResourcePerSecond(requestedChargedPower, ResourceManager.FNRESOURCE_CHARGED_PARTICLES);
-                    }
-
-                    received_power_per_second = thermalPowerReceived + chargedPowerReceived;
-                    effectiveInputPowerPerSecond = received_power_per_second * _totalEff;
-
-                    if (!CheatOptions.IgnoreMaxTemperature)
-                        consumeFNResourcePerSecond(effectiveInputPowerPerSecond, ResourceManager.FNRESOURCE_WASTEHEAT);
-
-                    if (!chargedParticleMode)
-                    {
-                        electricdtps = Math.Max(effectiveInputPowerPerSecond * powerOutputMultiplier, 0);
-                        effectiveMaxThermalPowerRatio = applies_balance ? (1 - attachedPowerSource.ChargedPowerRatio) : 1;
-                        maxElectricdtps = effectiveMaxThermalPowerRatio * attachedPowerSource.StableMaximumReactorPower * attachedPowerSource.PowerRatio * powerUsageEfficiency * _totalEff * CapacityRatio;
+                        _chargedPowerReceived = ConsumeFnResourcePerSecond(_requestedChargedPower, ResourceSettings.Config.ChargedPowerInMegawatt);
                     }
                     else
                     {
-                        electricdtps = Math.Max(effectiveInputPowerPerSecond * powerOutputMultiplier, 0);
-                        maxElectricdtps = overheatingModifier * maxChargedPowerForChargedGenerator * _totalEff;
+                        ConsumeFnResourcePerSecond(0, ResourceSettings.Config.ChargedPowerInMegawatt);
+                        _chargedPowerReceived = 0;
+                        _requestedChargedPower = 0;
                     }
 
-                    if (outputModuleResource != null)
+                    totalPowerReceived += _chargedPowerReceived;
+
+                    // any shortage should be consumed again from remaining thermalPower
+                    if (_shouldUseChargedPower && chargedPowerRatio < 1 && totalPowerReceived < _reactorPowerRequested)
                     {
-                        currentPowerForGeneratorMJ = Math.Min(maximumGeneratorPowerMJ, electricdtps);
-                        outputModuleResource.rate = currentPowerForGeneratorMJ * 1000;
-                        mockInputResource.rate = outputModuleResource.rate;
+                        _secondThermalRequest = Math.Max(0, _thermalPowerPlanned - totalPowerReceived);
+                        _thermalPowerReceived += ConsumeFnResourcePerSecond(_secondThermalRequest, ResourceSettings.Config.ThermalPowerInMegawatt);
                     }
 
-                    outputPower = isLimitedByMinThrotle 
-                        ? -supplyManagedFNResourcePerSecond(electricdtps, ResourceManager.FNRESOURCE_MEGAJOULES)
-                        : -supplyFNResourcePerSecondWithMaxAndEfficiency(electricdtps, maxElectricdtps, hotColdBathRatio, ResourceManager.FNRESOURCE_MEGAJOULES);
+                    if (!CheatOptions.IgnoreMaxTemperature)
+                    {
+                        ConsumeFnResourcePerSecond(_thermalPowerReceived * _totalEfficiency, ResourceSettings.Config.WasteHeatInMegawatt);
+                        SupplyFnResourcePerSecond(_chargedPowerReceived * (1 - _totalEfficiency), ResourceSettings.Config.WasteHeatInMegawatt);
+                    }
+                }
+                else // charged particle mode
+                {
+                    _hotColdBathRatio = 1;
+
+                    _totalEfficiency = maxEfficiency;
+
+                    if (_totalEfficiency <= 0) return;
+
+                    electrical_power_currently_needed = CalculateElectricalPowerCurrentlyNeeded();
+
+                    _megajoulesFraction = GetResourceBarFraction(ResourceSettings.Config.ElectricPowerInMegawatt);
+
+                    _powerNeededForCurrentEfficiency = electrical_power_currently_needed / _totalEfficiency;
+
+                    _requestedChargedPower = overheatingModifier * Math.Max(0, Math.Min(_maxChargedPowerForChargedGenerator, _powerNeededForCurrentEfficiency));
+                    _requestedPostChargedPower = overheatingModifier * Math.Max(0, (_attachedPowerSource.MinimumPower * chargedPowerRatio) - _requestedChargedPower);
+
+                    _maximumChargedPower = _attachedPowerSource.MaximumChargedPower * _attachedPowerSource.ChargedParticleEnergyEfficiency;
+                    _chargedPowerRequestRatio = Math.Min(1, _maximumChargedPower > 0 ? _requestedChargedPower / _maximumChargedPower : 0);
+
+                    _attachedPowerSource.NotifyActiveChargedEnergyGenerator(_totalEfficiency, Math.Min(1, _chargedPowerRequestRatio * (2.1 - _megajoulesFraction)), part.mass);
+
+                    _chargedPowerReceived = ConsumeFnResourcePerSecond(_requestedChargedPower, ResourceSettings.Config.ChargedPowerInMegawatt);
+
+                    if (!CheatOptions.IgnoreMaxTemperature)
+                    {
+                        var wasteheatFactor = 1 - _totalEfficiency;
+                        SupplyFnResourcePerSecond(_chargedPowerReceived * (1 - _totalEfficiency), ResourceSettings.Config.WasteHeatInMegawatt);
+                    }
+                }
+
+                received_power_per_second = _thermalPowerReceived + _chargedPowerReceived;
+                var effectiveInputPowerPerSecond = received_power_per_second * _totalEfficiency;
+
+                _electricPowerPerSecond = Math.Max(effectiveInputPowerPerSecond * powerOutputMultiplier, 0);
+                if (!chargedParticleMode)
+                {
+                    //var effectiveMaxThermalPowerRatio = (!_attachedPowerSource.IsConnectedToChargedGenerator && _maxThermalPower == 0) || isMHD || !_appliesBalance ? 1 : thermalPowerRatio;
+
+                    _maxElectricPowerPerSecond = _effectiveMaxThermalPowerRatio * _attachedPowerSource.StableMaximumReactorPower * _attachedPowerSource.PowerRatio * powerUsageEfficiency * _totalEfficiency * CapacityRatio;
+                }
+                else
+                    _maxElectricPowerPerSecond = overheatingModifier * _maxChargedPowerForChargedGenerator * _totalEfficiency;
+
+                var availableGeneratorRate = Math.Max(0, maximumGeneratorPowerMJ - _electricPowerPerSecond) * GameConstants.ecPerMJ;
+
+                _attachedPowerSource.UpdateAuxiliaryPowerSource(availableGeneratorRate);
+
+                var requiredElectricCharge = (GetRequiredElectricCharge() * GameConstants.ecPerMJ);
+
+                if (_outputModuleResource != null)
+                    _outputModuleResource.rate = requiredElectricCharge;
+
+                _outputPower = isLimitedByMinThrottle
+                    ? -SupplyManagedFnResourcePerSecond(_electricPowerPerSecond, ResourceSettings.Config.ElectricPowerInMegawatt)
+                    : -SupplyFnResourcePerSecondWithMaxAndEfficiency(_electricPowerPerSecond, _maxElectricPowerPerSecond, _hotColdBathRatio, ResourceSettings.Config.ElectricPowerInMegawatt);
+            }
+            else
+            {
+                _electricPowerPerSecond = 0;
+                _maxElectricPowerPerSecond = 0;
+                generatorInit = true;
+                SupplyManagedFnResourcePerSecond(0, ResourceSettings.Config.ElectricPowerInMegawatt);
+
+                if (_stockModuleGenerator != null && _stockModuleGenerator.generatorIsActive)
+                    _stockModuleGenerator.Shutdown();
+
+                if (IsEnabled && !vessel.packed)
+                {
+                    if (_attachedPowerSource == null)
+                    {
+                        IsEnabled = false;
+                        var message = Localizer.Format("#LOC_KSPIE_Generator_Msg1");//"Generator Shutdown: No Attached Power Source"
+                        Debug.Log("[KSPI]: " + message);
+                        ScreenMessages.PostScreenMessage(message, 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                        PowerDown();
+                    }
+                    else if ( !FNRadiator.HasRadiatorsForVessel(vessel))
+                    {
+                        IsEnabled = false;
+                        var message = Localizer.Format("#LOC_KSPIE_Generator_Msg2");//"Generator Shutdown: No radiators available!"
+                        Debug.Log("[KSPI]: " + message);
+                        ScreenMessages.PostScreenMessage(message, 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                        PowerDown();
+                    }
                 }
                 else
                 {
-                    electricdtps = 0;
-                    maxElectricdtps = 0;
-                    generatorInit = true;
-                    supplyManagedFNResourcePerSecond(0, ResourceManager.FNRESOURCE_MEGAJOULES);
-
-                    if (stockModuleGenerator != null && stockModuleGenerator.generatorIsActive == true)
-                        stockModuleGenerator.Shutdown();
-
-                    if (IsEnabled && !vessel.packed)
-                    {
-                        if (attachedPowerSource == null)
-                        {
-                            IsEnabled = false;
-                            var message = "Generator Shutdown: No Attached Power Source";
-                            Debug.Log("[KSPI]: " + message);
-                            ScreenMessages.PostScreenMessage(message, 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                            PowerDown();
-                        }
-                        else if ( !FNRadiator.hasRadiatorsForVessel(vessel))
-                        {
-                            IsEnabled = false;
-                            var message = "Generator Shutdown: No radiators available!";
-                            Debug.Log("[KSPI]: " + message);
-                            ScreenMessages.PostScreenMessage(message, 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                            PowerDown();
-                        }
-                    }
-                    else
-                    {
-                        PowerDown();
-                    }
+                    PowerDown();
                 }
-            }
-            catch (Exception e)
-            {
-                Debug.LogError("[KSPI]: Exception in FNGenerator OnFixedUpdateResourceSuppliable: " + e.Message);
             }
         }
 
 
         public override void OnPostResourceSuppliable(double fixedDeltaTime)
         {
-            double totalPowerReceived = 0;
+            if (_attachedPowerSource == null) return;
 
-            postThermalPowerReceived = 0;
-            postChargedPowerReceived = 0;
+            double postThermalPowerReceived = 0;
+            double postChargedPowerReceived = 0;
 
             if (!chargedParticleMode) // thermal mode
             {
-                if (attachedPowerSource.ChargedPowerRatio != 1)
-                {
-                    postThermalPowerReceived += consumeFNResourcePerSecond(requestedPostThermalPower, ResourceManager.FNRESOURCE_THERMALPOWER);
-                }
+                if (_attachedPowerSource.ChargedPowerRatio < 1)
+                    postThermalPowerReceived += ConsumeFnResourcePerSecond(_requestedPostThermalPower, ResourceSettings.Config.ThermalPowerInMegawatt);
 
-                totalPowerReceived = thermalPowerReceived + chargedPowerReceived + postThermalPowerReceived;
+                var powerReceived = _thermalPowerReceived + _chargedPowerReceived + postThermalPowerReceived;
 
                 // Collect charged power when needed
-                if (attachedPowerSource.ChargedPowerRatio == 1)
+                if (_attachedPowerSource.ChargedPowerRatio >= 1)
                 {
-                    postChargedPowerReceived += consumeFNResourcePerSecond(requestedPostReactorPower, ResourceManager.FNRESOURCE_CHARGED_PARTICLES);
+                    postChargedPowerReceived += ConsumeFnResourcePerSecond(_requestedPostReactorPower, ResourceSettings.Config.ChargedPowerInMegawatt);
                 }
-                else if (shouldUseChargedPower && totalPowerReceived < reactorPowerRequested)
+                else if (_shouldUseChargedPower && powerReceived < _reactorPowerRequested)
                 {
-                    var postPowerRequest = Math.Min(Math.Min(requestedPostReactorPower - totalPowerReceived, maxChargedPowerForThermalGenerator), Math.Max(0, maxReactorPower - totalPowerReceived));
+                    var postPowerRequest = Math.Min(Math.Min(_requestedPostReactorPower - powerReceived, _maxChargedPowerForThermalGenerator), Math.Max(0, _maxReactorPower - powerReceived));
 
-                    postChargedPowerReceived += consumeFNResourcePerSecond(postPowerRequest, ResourceManager.FNRESOURCE_CHARGED_PARTICLES);
+                    postChargedPowerReceived += ConsumeFnResourcePerSecond(postPowerRequest, ResourceSettings.Config.ChargedPowerInMegawatt);
                 }
             }
             else // charged power mode
             {
-                postChargedPowerReceived += consumeFNResourcePerSecond(requestedPostChargedPower, ResourceManager.FNRESOURCE_CHARGED_PARTICLES);
+                postChargedPowerReceived += ConsumeFnResourcePerSecond(_requestedPostChargedPower, ResourceSettings.Config.ChargedPowerInMegawatt);
             }
 
-            post_received_power_per_second = postThermalPowerReceived + postChargedPowerReceived;
-
-            postEffectiveInputPowerPerSecond = post_received_power_per_second * _totalEff;
-
             if (!CheatOptions.IgnoreMaxTemperature)
-                consumeFNResourcePerSecond(postEffectiveInputPowerPerSecond, ResourceManager.FNRESOURCE_WASTEHEAT);
+            {
+                ConsumeFnResourcePerSecond(postThermalPowerReceived * _totalEfficiency, ResourceSettings.Config.WasteHeatInMegawatt);
+                SupplyFnResourcePerSecond(postChargedPowerReceived * (1 - _totalEfficiency), ResourceSettings.Config.WasteHeatInMegawatt);
+            }
 
-            supplyManagedFNResourcePerSecond(postEffectiveInputPowerPerSecond, ResourceManager.FNRESOURCE_MEGAJOULES);
+            _postEffectiveInputPowerPerSecond = Math.Max(0, Math.Min((postThermalPowerReceived + postChargedPowerReceived) * _totalEfficiency, _maximumElectricPower - _electricPowerPerSecond));
+
+            SupplyManagedFnResourcePerSecond(_postEffectiveInputPowerPerSecond, ResourceSettings.Config.ElectricPowerInMegawatt);
         }
 
         private void UpdateBuffers()
         {
+            if (!useResourceBuffers)
+                return;
+
             if (!maintainsMegaWattPowerBuffer)
                 return;
 
-            resourceBuffers.UpdateVariable(ResourceManager.FNRESOURCE_WASTEHEAT, this.part.mass);
-            if (maxStableMegaWattPower > 0)
-            { 
+            if (controlWasteHeatBuffer)
+                _resourceBuffers.UpdateVariable(ResourceSettings.Config.WasteHeatInMegawatt, this.part.mass);
+
+            if (_maxStableMegaWattPower > 0)
+            {
                 _powerState = PowerStates.PowerOnline;
 
-                stablePowerForBuffer = chargedParticleMode 
-                       ? attachedPowerSource.ChargedPowerRatio * maxStableMegaWattPower
-                       : applies_balance ? (1 - attachedPowerSource.ChargedPowerRatio) * maxStableMegaWattPower : maxStableMegaWattPower;
+                var stablePowerForBuffer = chargedParticleMode
+                       ? _attachedPowerSource.ChargedPowerRatio * _maxStableMegaWattPower
+                       : _appliesBalance ? (1 - _attachedPowerSource.ChargedPowerRatio) * _maxStableMegaWattPower : _maxStableMegaWattPower;
 
-                powerBufferBonus = attachedPowerSource.PowerBufferBonus;
-
-                megawattBufferAmount = (minimumBufferSize * 50) + (powerBufferBonus + 1) * stablePowerForBuffer;
-                resourceBuffers.UpdateVariable(ResourceManager.FNRESOURCE_MEGAJOULES, megawattBufferAmount);
-                resourceBuffers.UpdateVariable(ResourceManager.STOCK_RESOURCE_ELECTRICCHARGE, megawattBufferAmount);
+                _megawattBufferAmount = (minimumBufferSize * 50) + (_attachedPowerSource.PowerBufferBonus + 1) * stablePowerForBuffer;
+                _resourceBuffers.UpdateVariable(ResourceSettings.Config.ElectricPowerInMegawatt, _megawattBufferAmount);
+                if (!Kerbalism.IsLoaded)
+                    _resourceBuffers.UpdateVariable(ResourceSettings.Config.ElectricPowerInKilowatt, _megawattBufferAmount);
             }
 
-            resourceBuffers.UpdateBuffers();
+            _resourceBuffers.UpdateBuffers();
         }
 
         private double CalculateElectricalPowerCurrentlyNeeded()
         {
-            megajouleBarRatio = getResourceBarRatio(ResourceManager.FNRESOURCE_MEGAJOULES);
-            megajoulePecentage = megajouleBarRatio * 100;
+            if (isLimitedByMinThrottle)
+                return _attachedPowerSource.MinimumPower;
 
-            if (isLimitedByMinThrotle)
-                return attachedPowerSource.MinimumPower;
+            var currentUnfilledResourceDemand = Math.Max(0, GetCurrentUnfilledResourceDemand(ResourceSettings.Config.ElectricPowerInMegawatt));
 
-            currentUnfilledResourceDemand = Math.Max(0, GetCurrentUnfilledResourceDemand(ResourceManager.FNRESOURCE_MEGAJOULES));
+            _powerDemandQueue.Enqueue(currentUnfilledResourceDemand);
+            if (_powerDemandQueue.Count > 4)
+                _powerDemandQueue.Dequeue();
 
-            spareResourceCapacity = getSpareResourceCapacity(ResourceManager.FNRESOURCE_MEGAJOULES);
-            maxStableMegaWattPower = MaxStableMegaWattPower;
+            var spareResourceCapacity = GetSpareResourceCapacity(ResourceSettings.Config.ElectricPowerInMegawatt);
+            _maxStableMegaWattPower = MaxStableMegaWattPower;
 
-            possibleSpareResourceCapacityFilling = Math.Min(spareResourceCapacity, maxStableMegaWattPower);
 
-            electrical_power_currently_needed = currentUnfilledResourceDemand + possibleSpareResourceCapacityFilling;
+            //var megajoulesFraction = GetResourceBarFraction(ResourceSettings.Config.ElectricPowerInMegawatt);
+            //var possibleSpareResourceCapacityFilling = (1 - megajoulesFraction) * _maxStableMegaWattPower; // Math.Min(spareResourceCapacity, _maxStableMegaWattPower);
 
-            return electrical_power_currently_needed;
+            _possibleSpareCapacity = Math.Min(_maxStableMegaWattPower, spareResourceCapacity);
+
+            _maxUnfilledDemand = _powerDemandQueue.Max();
+
+            return Math.Min(_maximumElectricPower, Math.Min(1, PowerControlRatio) * _maxUnfilledDemand + Math.Max(0, PowerControlRatio - 1) * _possibleSpareCapacity);
         }
 
         private void PowerDown()
         {
-            if (_powerState != PowerStates.PowerOffline)
+            if (_powerState != PowerStates.PowerOffline && _attachedPowerSource != null)
             {
+                if (_powerDownFraction > 0)
+                    _powerDownFraction -= 0.01;
 
-                if (powerDownFraction > 0)
-                    powerDownFraction -= 0.01;
-
-                if (powerDownFraction <= 0)
+                if (_powerDownFraction <= 0)
                     _powerState = PowerStates.PowerOffline;
 
-                megawattBufferAmount = (minimumBufferSize * 50) + (attachedPowerSource.PowerBufferBonus + 1) * maxStableMegaWattPower * powerDownFraction;
+                _megawattBufferAmount = minimumBufferSize * 50 + (_attachedPowerSource.PowerBufferBonus + 1) * _maxStableMegaWattPower * _powerDownFraction;
             }
             else
+                _megawattBufferAmount = minimumBufferSize * 50;
+
+
+            if (useResourceBuffers)
             {
-                megawattBufferAmount = (minimumBufferSize * 50);
+                if (controlWasteHeatBuffer)
+                    _resourceBuffers.UpdateVariable(ResourceSettings.Config.WasteHeatInMegawatt, this.part.mass);
+
+                _resourceBuffers.UpdateVariable(ResourceSettings.Config.ElectricPowerInMegawatt, _megawattBufferAmount);
+                if (!Kerbalism.IsLoaded)
+                    _resourceBuffers.UpdateVariable(ResourceSettings.Config.ElectricPowerInKilowatt,
+                        _megawattBufferAmount);
+                _resourceBuffers.UpdateBuffers();
             }
-            
-            resourceBuffers.UpdateVariable(ResourceManager.FNRESOURCE_WASTEHEAT, this.part.mass);
-            resourceBuffers.UpdateVariable(ResourceManager.FNRESOURCE_MEGAJOULES, megawattBufferAmount);
-            resourceBuffers.UpdateVariable(ResourceManager.STOCK_RESOURCE_ELECTRICCHARGE, megawattBufferAmount);
-            resourceBuffers.UpdateBuffers();
         }
 
         public override string GetInfo()
         {
-            var sb = new StringBuilder();
-
-            sb.AppendLine("<color=#7fdfffff>" + Localizer.Format("#LOC_KSPIE_Generator_upgradeTechnologies") + "</color>");
+            var sb = StringBuilderCache.Acquire();
+            sb.Append("<color=#7fdfffff>").Append(Localizer.Format("#LOC_KSPIE_Generator_upgradeTechnologies")).AppendLine("</color>");
             sb.Append("<size=10>");
-            if (!string.IsNullOrEmpty(Mk2TechReq)) sb.AppendLine("- " + Localizer.Format(PluginHelper.GetTechTitleById(Mk2TechReq)));
-            if (!string.IsNullOrEmpty(Mk3TechReq)) sb.AppendLine("- " + Localizer.Format(PluginHelper.GetTechTitleById(Mk3TechReq)));
-            if (!string.IsNullOrEmpty(Mk4TechReq)) sb.AppendLine("- " + Localizer.Format(PluginHelper.GetTechTitleById(Mk4TechReq)));
-            if (!string.IsNullOrEmpty(Mk5TechReq)) sb.AppendLine("- " + Localizer.Format(PluginHelper.GetTechTitleById(Mk5TechReq)));
-            if (!string.IsNullOrEmpty(Mk6TechReq)) sb.AppendLine("- " + Localizer.Format(PluginHelper.GetTechTitleById(Mk6TechReq)));
-            if (!string.IsNullOrEmpty(Mk7TechReq)) sb.AppendLine("- " + Localizer.Format(PluginHelper.GetTechTitleById(Mk7TechReq)));
-            if (!string.IsNullOrEmpty(Mk8TechReq)) sb.AppendLine("- " + Localizer.Format(PluginHelper.GetTechTitleById(Mk8TechReq)));
-            if (!string.IsNullOrEmpty(Mk9TechReq)) sb.AppendLine("- " + Localizer.Format(PluginHelper.GetTechTitleById(Mk9TechReq)));
-            sb.AppendLine();
+
+            if (!string.IsNullOrEmpty(Mk2TechReq))
+                sb.Append("- ").AppendLine(Localizer.Format(PluginHelper.GetTechTitleById(Mk2TechReq)));
+            if (!string.IsNullOrEmpty(Mk3TechReq))
+                sb.Append("- ").AppendLine(Localizer.Format(PluginHelper.GetTechTitleById(Mk3TechReq)));
+            if (!string.IsNullOrEmpty(Mk4TechReq))
+                sb.Append("- ").AppendLine(Localizer.Format(PluginHelper.GetTechTitleById(Mk4TechReq)));
+            if (!string.IsNullOrEmpty(Mk5TechReq))
+                sb.Append("- ").AppendLine(Localizer.Format(PluginHelper.GetTechTitleById(Mk5TechReq)));
+            if (!string.IsNullOrEmpty(Mk6TechReq))
+                sb.Append("- ").AppendLine(Localizer.Format(PluginHelper.GetTechTitleById(Mk6TechReq)));
+            if (!string.IsNullOrEmpty(Mk7TechReq))
+                sb.Append("- ").AppendLine(Localizer.Format(PluginHelper.GetTechTitleById(Mk7TechReq)));
+            if (!string.IsNullOrEmpty(Mk8TechReq))
+                sb.Append("- ").AppendLine(Localizer.Format(PluginHelper.GetTechTitleById(Mk8TechReq)));
+            if (!string.IsNullOrEmpty(Mk9TechReq))
+                sb.Append("- ").AppendLine(Localizer.Format(PluginHelper.GetTechTitleById(Mk9TechReq)));
+
+            sb.Append("</size><color=#7fdfffff>").Append(Localizer.Format("#LOC_KSPIE_Generator_conversionEfficiency")).AppendLine("</color>");
+            sb.Append("<size=10>Mk1: ").AppendLine(efficiencyMk1.ToString("P0"));
+            if (!string.IsNullOrEmpty(Mk2TechReq))
+                sb.Append("Mk2: ").AppendLine(efficiencyMk2.ToString("P0"));
+            if (!string.IsNullOrEmpty(Mk3TechReq))
+                sb.Append("Mk3: ").AppendLine(efficiencyMk3.ToString("P0"));
+            if (!string.IsNullOrEmpty(Mk4TechReq))
+                sb.Append("Mk4: ").AppendLine(efficiencyMk4.ToString("P0"));
+            if (!string.IsNullOrEmpty(Mk5TechReq))
+                sb.Append("Mk5: ").AppendLine(efficiencyMk5.ToString("P0"));
+            if (!string.IsNullOrEmpty(Mk6TechReq))
+                sb.Append("Mk6: ").AppendLine(efficiencyMk6.ToString("P0"));
+            if (!string.IsNullOrEmpty(Mk7TechReq))
+                sb.Append("Mk7: ").AppendLine(efficiencyMk7.ToString("P0"));
+            if (!string.IsNullOrEmpty(Mk8TechReq))
+                sb.Append("Mk8: ").AppendLine(efficiencyMk8.ToString("P0"));
+            if (!string.IsNullOrEmpty(Mk9TechReq))
+                sb.Append("Mk9: ").AppendLine(efficiencyMk9.ToString("P0"));
             sb.Append("</size>");
 
-            sb.AppendLine("<color=#7fdfffff>" + Localizer.Format("#LOC_KSPIE_Generator_conversionEfficiency") + "</color>");
-            sb.Append("<size=10>");
-            sb.AppendLine("Mk1: " + (efficiencyMk1 * 100).ToString("F0") + "%");
-            if (!string.IsNullOrEmpty(Mk2TechReq)) sb.AppendLine("Mk2: " + (efficiencyMk2 * 100).ToString("F0") + "%");
-            if (!string.IsNullOrEmpty(Mk3TechReq)) sb.AppendLine("Mk3: " + (efficiencyMk3 * 100).ToString("F0") + "%");
-            if (!string.IsNullOrEmpty(Mk4TechReq)) sb.AppendLine("Mk4: " + (efficiencyMk4 * 100).ToString("F0") + "%");
-            if (!string.IsNullOrEmpty(Mk5TechReq)) sb.AppendLine("Mk5: " + (efficiencyMk5 * 100).ToString("F0") + "%");
-            if (!string.IsNullOrEmpty(Mk6TechReq)) sb.AppendLine("Mk6: " + (efficiencyMk6 * 100).ToString("F0") + "%");
-            if (!string.IsNullOrEmpty(Mk7TechReq)) sb.AppendLine("Mk7: " + (efficiencyMk7 * 100).ToString("F0") + "%");
-            if (!string.IsNullOrEmpty(Mk8TechReq)) sb.AppendLine("Mk8: " + (efficiencyMk8 * 100).ToString("F0") + "%");
-            if (!string.IsNullOrEmpty(Mk9TechReq)) sb.AppendLine("Mk9: " + (efficiencyMk9 * 100).ToString("F0") + "%");
-            sb.Append("</size>");
-
-            return sb.ToString();
+            return sb.ToStringAndRelease();
         }
 
         public override string getResourceManagerDisplayName()
         {
-            var result = base.getResourceManagerDisplayName();
-            if (isLimitedByMinThrotle)
-                return result;
+            if (isLimitedByMinThrottle)
+                return base.getResourceManagerDisplayName();
 
-            if (attachedPowerSource != null && attachedPowerSource.Part != null && result != attachedPowerSource.Part.partInfo.title)
-                result += " (" + attachedPowerSource.Part.partInfo.title + ")";
-            return result;
+            var displayName = part.partInfo.title + " " + Localizer.Format("#LOC_KSPIE_Generator_partdisplay");//(generator)
+
+            if (similarParts == null)
+            {
+                similarParts = vessel.parts.Where(m => m.partInfo.title == this.part.partInfo.title).ToList();
+                partNrInList = 1 + similarParts.IndexOf(this.part);
+            }
+
+            if (similarParts.Count > 1)
+                displayName += " " + partNrInList;
+
+            return displayName;
         }
 
         public override int getPowerPriority()
@@ -1418,15 +1357,12 @@ namespace FNPlugin
             return 0;
         }
 
-        public override int getSupplyPriority()
+        public override int GetSupplyPriority()
         {
-            if (isLimitedByMinThrotle)
+            if (isLimitedByMinThrottle)
                 return 1;
 
-            if (attachedPowerSource == null)
-                return base.getPowerPriority();
-
-            return attachedPowerSource.ProviderPowerPriority;
+            return _attachedPowerSource?.ProviderPowerPriority ?? base.getPowerPriority();
         }
     }
 }

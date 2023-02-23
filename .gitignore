@@ -5,7 +5,6 @@ WarpPlugin.userprefs
 FNPlugin/obj
 WPv023/
 *.suo
-*.ogg
 *.suo
 *.lock
 *.ide
@@ -13,3 +12,4 @@ WPv023/
 *.ide-wal
 Thumbs.db
 WarpPlugin.v12.suo
+.vs
